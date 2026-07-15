@@ -1,0 +1,14 @@
+fastapi==0.111.0
+uvicorn==0.30.1
+SQLAlchemy==2.0.31
+asyncpg==0.29.0
+boto3==1.34.137
+botocore==1.34.137
+pydantic==2.7.4
+pydantic-settings==2.3.4
+greenlet==3.0.3
+cloudinary>=1.40.0
+python-dotenv==1.0.1
+websockets==12.0
+Pillow==10.3.0
+ImageHash==4.3.1
