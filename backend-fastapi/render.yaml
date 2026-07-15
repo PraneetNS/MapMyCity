@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: crowdsense-backend-fastapi
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+        placeholder: "postgresql://user:password@endpoint.neon.tech/dbname?sslmode=require"
+      - key: R2_ACCOUNT_ID
+        sync: false
+        placeholder: "your-cloudflare-account-id"
+      - key: R2_ACCESS_KEY
+        sync: false
+        placeholder: "your-cloudflare-r2-access-key"
+      - key: R2_SECRET_KEY
+        sync: false
+        placeholder: "your-cloudflare-r2-secret-key"
+      - key: R2_BUCKET_NAME
+        sync: false
+        placeholder: "your-cloudflare-r2-bucket-name"
