@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+
+# Environment & secrets
+.env
+.env.local
+.env*.local
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+.next/
+web-build/
+*.tsbuildinfo
+
+# Expo
+.expo/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Logs
+*.log
+logs/
+
+# OS & editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Native mobile
+/ios
+/android
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Claude/Cursor local settings
+.claude/
