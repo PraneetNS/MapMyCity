@@ -24,6 +24,7 @@ except ImportError:
     HAS_YOLO = False
     print("CV Worker: ultralytics not installed. Falling back to mockup inference.")
 
+# Helper to execute computer vision (YOLO) visual inference on report photos
 async def run_visual_inference(photo_url: str) -> tuple[float, str]:
     if not photo_url:
         return 0.0, "unknown"
