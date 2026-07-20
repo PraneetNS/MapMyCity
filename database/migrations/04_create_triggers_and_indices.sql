@@ -119,6 +119,7 @@ EXECUTE FUNCTION handle_submission_reputation();
 
 -- 4. AFTER INSERT OR UPDATE Trigger: Recompute Cluster Road Health Index (RHI)
 -- Automatically triggers RHI re-calculations when severity metrics or cluster assignments change
+-- Core function invoked by database triggers to aggregate visual severity, G-force jolts, and density
 CREATE OR REPLACE FUNCTION recompute_cluster_rhi()
 RETURNS TRIGGER AS $$
 DECLARE
