@@ -40,11 +40,20 @@ const { width } = Dimensions.get('window');
 const WINDOW_SIZE = 20; // 1 second of data at 20Hz (50ms interval)
 
 interface RoughPatch {
+  id: string;
   latitude: number;
   longitude: number;
   intensity: number;
   captured_at: string;
 }
+
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // meters
@@ -232,6 +241,7 @@ export default function RideModeScreen() {
               lastBumpTimeRef.current = now;
               if (currentLocRef.current) {
                 const patch: RoughPatch = {
+                  id: generateUUID(),
                   latitude: currentLocRef.current.latitude,
                   longitude: currentLocRef.current.longitude,
                   intensity: deviation,
@@ -294,6 +304,7 @@ export default function RideModeScreen() {
           body: JSON.stringify({
             device_id: deviceId,
             jolts: roughPatches.map((p) => ({
+              id: p.id,
               latitude: p.latitude,
               longitude: p.longitude,
               intensity: p.intensity,
