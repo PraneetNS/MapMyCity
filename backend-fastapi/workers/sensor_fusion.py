@@ -20,6 +20,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 JOLT_MIN = 0.45
 JOLT_MAX = 2.0
 
+# Helper to normalize vertical G-force acceleration values to a normalized 0-1 scale
 def normalize_jolt(raw_intensity: float) -> float:
     """
     Normalizes the raw vertical acceleration spike to a [0.0, 1.0] range.
