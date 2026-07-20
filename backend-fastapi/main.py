@@ -16,10 +16,34 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import redis.asyncio as aioredis
+
 from database import get_db
 import config.cloudinary as cloudinary_config
 import cloudinary.utils
 from moderation import check_image_content
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_client: Optional[aioredis.Redis] = None
+
+async def push_redis_event(submission_id, cluster_id, has_image: bool, has_jolt: bool, raw_jolt_intensity=None):
+    if not redis_client:
+        return
+    try:
+        event = {
+            "submission_id": str(submission_id),
+            "cluster_id": str(cluster_id) if cluster_id else "",
+            "has_image": "true" if has_image else "false",
+            "has_jolt": "true" if has_jolt else "false",
+        }
+        if raw_jolt_intensity is not None:
+            event["raw_jolt_intensity"] = str(raw_jolt_intensity)
+            
+        await redis_client.xadd("submissions:events", event)
+        print(f"FastAPI Backend: Pushed event to submissions:events for submission {submission_id}")
+    except Exception as e:
+        print(f"FastAPI Backend: Failed to push event to Redis Stream: {e}")
+
 
 app = FastAPI(
     title="CrowdSense FastAPI Backend",
@@ -42,10 +66,61 @@ MOCK_SUBMISSIONS = []
 MOCK_CLUSTERS = []
 MOCK_RESOLUTION_PHOTOS = []
 
+import asyncio
+
+async def run_daily_confidence_decay():
+    while True:
+        try:
+            if USE_MOCK:
+                cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+                for c in MOCK_CLUSTERS:
+                    c_updated_at = c.get("rhi_updated_at")
+                    if c_updated_at:
+                        if c_updated_at.tzinfo is None:
+                            c_updated_at = c_updated_at.replace(tzinfo=timezone.utc)
+                        if c_updated_at < cutoff:
+                            c["road_health_index"] = None
+                            c["rhi_confidence"] = None
+                            c["avg_visual_severity"] = None
+                            c["avg_jolt_intensity"] = None
+                            c["rhi_updated_at"] = datetime.now(timezone.utc)
+            else:
+                from database import async_session
+                async with async_session() as db:
+                    query = text("""
+                        UPDATE clusters
+                        SET road_health_index = NULL,
+                            rhi_confidence = NULL,
+                            avg_visual_severity = NULL,
+                            avg_jolt_intensity = NULL
+                        WHERE rhi_updated_at < now() - interval '30 days'
+                    """)
+                    await db.execute(query)
+                    await db.commit()
+            print("FastAPI Backend [Decay Job]: Daily RHI confidence decay completed successfully.")
+        except Exception as e:
+            print(f"FastAPI Backend [Decay Job]: Error in RHI decay task: {e}")
+        
+        # wait 24 hours
+        await asyncio.sleep(24 * 3600)
+
 @app.on_event("startup")
 async def startup_event():
     global USE_MOCK
+    global redis_client
     try:
+        # Initialize Redis Client
+        try:
+            redis_client = aioredis.Redis.from_url(REDIS_URL, decode_responses=True)
+            await redis_client.ping()
+            print("FastAPI Backend: Redis connection verified successfully.")
+        except Exception as redis_err:
+            print(f"FastAPI Backend: Redis connection failed ({redis_err}). Workers will not consume events.")
+            redis_client = None
+
+        # Start RHI decay background worker loop
+        asyncio.create_task(run_daily_confidence_decay())
+
         # Try to execute a simple test query to verify database connectivity
         from database import async_session
         async with async_session() as db:
@@ -599,9 +674,15 @@ class ClusterResponse(BaseModel):
     status: str
     submission_count: int
     days_to_resolution: Optional[float] = None
+    confidence: Optional[float] = None
+    corroborated: Optional[bool] = None
+    road_health_index: Optional[float] = None
+    rhi_confidence: Optional[float] = None
+    rhi_updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
 
 class ResolutionSubmit(BaseModel):
     device_id: str = Field(..., description="Unique device ID of the resolver.")
@@ -622,6 +703,7 @@ class ResolutionPhotoResponse(BaseModel):
     submitted_at: datetime
 
 class PassiveJolt(BaseModel):
+    id: uuid.UUID = Field(..., description="Unique client-generated ID.")
     latitude: float = Field(..., description="Latitude coordinate of the accelerometer spike.")
     longitude: float = Field(..., description="Longitude coordinate of the accelerometer spike.")
     intensity: float = Field(..., description="Z-axis acceleration spike intensity (in Gs).")
@@ -723,6 +805,13 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
         if status != "rejected":
             background_tasks.add_task(run_clustering_task, row["id"])
             
+        await push_redis_event(
+            submission_id=row["id"],
+            cluster_id=None,
+            has_image=True,
+            has_jolt=False
+        )
+        
         ret_row = dict(row)
         if "auto_rejected_content_policy" in ret_row["flags"]:
             ret_row["photo_url"] = ""
@@ -800,6 +889,13 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
         if status != "rejected":
             background_tasks.add_task(run_clustering_task, row_dict["id"])
             
+        await push_redis_event(
+            submission_id=row_dict["id"],
+            cluster_id=None,
+            has_image=True,
+            has_jolt=False
+        )
+            
         if "auto_rejected_content_policy" in row_dict["flags"]:
             row_dict["photo_url"] = ""
             
@@ -820,9 +916,8 @@ async def create_passive_batch(
     """
     if USE_MOCK:
         for jolt in data.jolts:
-            row_id = uuid.uuid4()
             row = {
-                "id": row_id,
+                "id": jolt.id,
                 "device_id": data.device_id,
                 "mission_type": "passive_road_quality",
                 "photo_url": "",
@@ -837,7 +932,14 @@ async def create_passive_batch(
                 "cluster_id": None
             }
             MOCK_SUBMISSIONS.append(row)
-            background_tasks.add_task(run_clustering_task, row_id)
+            background_tasks.add_task(run_clustering_task, jolt.id)
+            await push_redis_event(
+                submission_id=jolt.id,
+                cluster_id=None,
+                has_image=False,
+                has_jolt=True,
+                raw_jolt_intensity=jolt.intensity
+            )
         return {"status": "success", "processed_count": len(data.jolts)}
 
     inserted_ids = []
@@ -845,13 +947,14 @@ async def create_passive_batch(
         for jolt in data.jolts:
             query = text("""
                 INSERT INTO submissions (
-                    device_id, mission_type, photo_url, location, latitude, longitude, captured_at, submitted_at, status, notes, flags
+                    id, device_id, mission_type, photo_url, location, latitude, longitude, captured_at, submitted_at, status, notes, flags
                 ) VALUES (
-                    :device_id, 'passive_road_quality', '', ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
+                    :id, :device_id, 'passive_road_quality', '', ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
                     :latitude, :longitude, :captured_at, NOW(), 'approved', :notes, '[]'::jsonb
                 ) RETURNING id
             """)
             res = await db.execute(query, {
+                "id": jolt.id,
                 "device_id": data.device_id,
                 "latitude": jolt.latitude,
                 "longitude": jolt.longitude,
@@ -864,9 +967,16 @@ async def create_passive_batch(
         
         await db.commit()
         
-        # Trigger spatiotemporal clustering task for each submission
-        for sub_id in inserted_ids:
-            background_tasks.add_task(run_clustering_task, sub_id)
+        # Trigger spatiotemporal clustering task for each submission and push Redis events
+        for jolt in data.jolts:
+            background_tasks.add_task(run_clustering_task, jolt.id)
+            await push_redis_event(
+                submission_id=jolt.id,
+                cluster_id=None,
+                has_image=False,
+                has_jolt=True,
+                raw_jolt_intensity=jolt.intensity
+            )
             
         return {"status": "success", "processed_count": len(inserted_ids)}
     except Exception as e:
@@ -1370,10 +1480,14 @@ async def get_device_trust_score(device_id: str, db: AsyncSession = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to query device trust score: {str(e)}")
 @app.get("/clusters", response_model=List[ClusterResponse], tags=["Clusters"])
-async def get_clusters(db: AsyncSession = Depends(get_db)):
+async def get_clusters(
+    min_rhi: Optional[float] = Query(None, description="Filter clusters with road_health_index >= min_rhi"),
+    sort: Optional[str] = Query(None, description="Sort order: rhi_asc, rhi_desc"),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Retrieves all spatiotemporal clusters of reports, including days_to_resolution metric,
-    confidence metrics, and corroboration flags.
+    confidence metrics, corroboration flags, and Road Health Index (RHI).
     """
     if USE_MOCK:
         clusters_list = []
@@ -1390,7 +1504,6 @@ async def get_clusters(db: AsyncSession = Depends(get_db)):
                 if rp["submission_id"] in sub_ids
             ]
             if res_dates:
-                # days_to_resolution = duration from c["first_reported_at"] to the earliest resolution photo submitted_at date in days
                 first_reported = make_aware(c["first_reported_at"])
                 earliest_res = min(make_aware(d) for d in res_dates)
                 c_copy["days_to_resolution"] = (earliest_res - first_reported).total_seconds() / 86400.0
@@ -1406,12 +1519,30 @@ async def get_clusters(db: AsyncSession = Depends(get_db)):
                 c_copy["confidence"] = 1.0
                 c_copy["corroborated"] = True
                 
+            # Expose RHI metrics
+            c_copy["road_health_index"] = c.get("road_health_index")
+            c_copy["rhi_confidence"] = c.get("rhi_confidence")
+            c_copy["rhi_updated_at"] = c.get("rhi_updated_at")
+            
             clusters_list.append(c_copy)
+
+        # Apply min_rhi filter
+        if min_rhi is not None:
+            clusters_list = [c for c in clusters_list if c.get("road_health_index") is not None and c["road_health_index"] >= min_rhi]
+
+        # Apply sorting
+        if sort == "rhi_asc":
+            clusters_list.sort(key=lambda x: x.get("road_health_index") if x.get("road_health_index") is not None else float('inf'))
+        elif sort == "rhi_desc":
+            clusters_list.sort(key=lambda x: x.get("road_health_index") if x.get("road_health_index") is not None else float('-inf'), reverse=True)
+
         return clusters_list
     
-    query = text("""
+    # Build dynamic SQL query
+    base_query = """
         SELECT c.id, c.mission_type, ST_Y(c.centroid::geometry) AS latitude, ST_X(c.centroid::geometry) AS longitude, 
                c.first_reported_at, c.last_reported_at, c.status, c.submission_count,
+               c.road_health_index, c.rhi_confidence, c.rhi_updated_at,
                (
                    SELECT EXTRACT(EPOCH FROM (MIN(rp.submitted_at) - c.first_reported_at)) / 86400.0
                    FROM submissions s
@@ -1424,9 +1555,25 @@ async def get_clusters(db: AsyncSession = Depends(get_db)):
                    WHERE s.cluster_id = c.id
                ) AS distinct_devices
         FROM clusters c
-    """)
+    """
+    
+    where_clauses = []
+    params = {}
+    if min_rhi is not None:
+        where_clauses.append("c.road_health_index >= :min_rhi")
+        params["min_rhi"] = min_rhi
+
+    if where_clauses:
+        base_query += " WHERE " + " AND ".join(where_clauses)
+
+    if sort == "rhi_asc":
+        base_query += " ORDER BY c.road_health_index ASC NULLS LAST"
+    elif sort == "rhi_desc":
+        base_query += " ORDER BY c.road_health_index DESC NULLS LAST"
+        
+    query = text(base_query)
     try:
-        result = await db.execute(query)
+        result = await db.execute(query, params)
         rows = result.fetchall()
         
         ret_rows = []
