@@ -116,3 +116,105 @@ AFTER INSERT OR UPDATE OF status
 ON submissions
 FOR EACH ROW
 EXECUTE FUNCTION handle_submission_reputation();
+
+-- 4. AFTER INSERT OR UPDATE Trigger: Recompute Cluster Road Health Index (RHI)
+-- Automatically triggers RHI re-calculations when severity metrics or cluster assignments change
+CREATE OR REPLACE FUNCTION recompute_cluster_rhi()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_avg_visual double precision;
+  v_avg_jolt double precision;
+  v_count int;
+  v_rhi double precision;
+  v_w_visual double precision;
+  v_w_jolt double precision;
+  v_w_density double precision;
+BEGIN
+  -- Load weights from configuration table, fallback to default parameters if missing
+  SELECT visual_weight, jolt_weight, density_weight
+  INTO v_w_visual, v_w_jolt, v_w_density
+  FROM rhi_weights
+  ORDER BY id DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    v_w_visual := 0.45;
+    v_w_jolt := 0.35;
+    v_w_density := 0.20;
+  END IF;
+
+  -- A. Recompute for NEW cluster assignment
+  IF NEW.cluster_id IS NOT NULL THEN
+    SELECT AVG(visual_severity), AVG(jolt_intensity), COUNT(*)
+    INTO v_avg_visual, v_avg_jolt, v_count
+    FROM submissions
+    WHERE cluster_id = NEW.cluster_id
+      AND (visual_severity IS NOT NULL OR jolt_intensity IS NOT NULL);
+
+    IF v_count > 0 THEN
+      v_rhi := 100 - 100 * (
+        v_w_visual * COALESCE(v_avg_visual, 0)
+        + v_w_jolt * COALESCE(v_avg_jolt, 0)
+        + v_w_density * LEAST(v_count / 10.0, 1)
+      );
+
+      UPDATE clusters
+      SET avg_visual_severity = v_avg_visual,
+          avg_jolt_intensity = v_avg_jolt,
+          road_health_index = GREATEST(0, LEAST(100, v_rhi)),
+          rhi_confidence = LEAST(v_count / 10.0, 1),
+          rhi_updated_at = now()
+      WHERE id = NEW.cluster_id;
+    ELSE
+      UPDATE clusters
+      SET avg_visual_severity = NULL,
+          avg_jolt_intensity = NULL,
+          road_health_index = NULL,
+          rhi_confidence = NULL,
+          rhi_updated_at = now()
+      WHERE id = NEW.cluster_id;
+    END IF;
+  END IF;
+
+  -- B. Recompute for OLD cluster assignment if the submission was moved or unlinked
+  IF (TG_OP = 'UPDATE') AND OLD.cluster_id IS NOT NULL AND (NEW.cluster_id IS NULL OR OLD.cluster_id <> NEW.cluster_id) THEN
+    SELECT AVG(visual_severity), AVG(jolt_intensity), COUNT(*)
+    INTO v_avg_visual, v_avg_jolt, v_count
+    FROM submissions
+    WHERE cluster_id = OLD.cluster_id
+      AND (visual_severity IS NOT NULL OR jolt_intensity IS NOT NULL);
+
+    IF v_count > 0 THEN
+      v_rhi := 100 - 100 * (
+        v_w_visual * COALESCE(v_avg_visual, 0)
+        + v_w_jolt * COALESCE(v_avg_jolt, 0)
+        + v_w_density * LEAST(v_count / 10.0, 1)
+      );
+
+      UPDATE clusters
+      SET avg_visual_severity = v_avg_visual,
+          avg_jolt_intensity = v_avg_jolt,
+          road_health_index = GREATEST(0, LEAST(100, v_rhi)),
+          rhi_confidence = LEAST(v_count / 10.0, 1),
+          rhi_updated_at = now()
+      WHERE id = OLD.cluster_id;
+    ELSE
+      UPDATE clusters
+      SET avg_visual_severity = NULL,
+          avg_jolt_intensity = NULL,
+          road_health_index = NULL,
+          rhi_confidence = NULL,
+          rhi_updated_at = now()
+      WHERE id = OLD.cluster_id;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_recompute_cluster_rhi ON submissions;
+CREATE TRIGGER trg_recompute_cluster_rhi
+AFTER INSERT OR UPDATE OF visual_severity, jolt_intensity, cluster_id ON submissions
+FOR EACH ROW
+EXECUTE FUNCTION recompute_cluster_rhi();
