@@ -26,6 +26,7 @@ from moderation import check_image_content
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client: Optional[aioredis.Redis] = None
 
+# Push lightweight event metadata payload to Redis Stream submissions:events
 async def push_redis_event(submission_id, cluster_id, has_image: bool, has_jolt: bool, raw_jolt_intensity=None):
     if not redis_client:
         return
