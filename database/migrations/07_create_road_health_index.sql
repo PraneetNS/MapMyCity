@@ -1,4 +1,5 @@
 -- Migration 07: Create Road Health Index Schema
+-- Implements database column changes to store visual severity, damage type, and accelerometer intensities
 -- Deploys new columns for visual and jolt severity, table indexes, and dynamic RHI weight configurations
 
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS visual_severity double precision DEFAULT NULL;
