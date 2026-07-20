@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import { Camera, Map, ClipboardList, Shield, Sun, Moon, Laptop, Activity } from 'lucide-react-native';
@@ -47,6 +48,7 @@ const ThemeToggle = () => {
 
 function AppContent() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const toastConfig = {
     success: (props: any) => (
@@ -120,8 +122,10 @@ function AppContent() {
             tabBarStyle: {
               backgroundColor: theme.colors.white,
               borderTopColor: theme.colors.neutral[200],
-              height: 60,
-              paddingBottom: 8,
+              // Android edge-to-edge can place the system navigation bar over
+              // the app. Reserve its inset so every tab stays visible and tappable.
+              height: 60 + insets.bottom,
+              paddingBottom: Math.max(insets.bottom, 8),
               paddingTop: 8,
             },
             tabBarLabelStyle: {
@@ -147,8 +151,8 @@ function AppContent() {
         >
           <Tab.Screen name="Capture" component={CaptureScreen} />
           <Tab.Screen name="Map" component={MapScreen} />
-          <Tab.Screen name="Ride Mode" component={RideModeScreen} />
-          <Tab.Screen name="My submissions" component={SubmissionsScreen} />
+          <Tab.Screen name="Ride Mode" component={RideModeScreen} options={{ tabBarLabel: 'Ride' }} />
+          <Tab.Screen name="My submissions" component={SubmissionsScreen} options={{ tabBarLabel: 'Reports' }} />
           {process.env.EXPO_PUBLIC_ENABLE_ADMIN === 'true' ? (
             <Tab.Screen name="Admin" component={AdminScreen} />
           ) : null}
@@ -170,8 +174,10 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
