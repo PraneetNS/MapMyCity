@@ -193,7 +193,7 @@ export default function MapScreen() {
     },
   });
 
-  const [region, setRegion] = useState<Region | null>(null);
+  const [region, setRegion] = useState<Region>(defaultRegion);
   const debounceTimerRef = useRef<any>(null);
   const isFirstLoadRef = useRef(true);
 
