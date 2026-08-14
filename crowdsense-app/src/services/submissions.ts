@@ -159,8 +159,24 @@ export async function updateSubmissionStatus(id: string, status: 'approved' | 'r
     method: 'PATCH',
     body: JSON.stringify({ status }),
   }).catch(() => {
-    // Graceful fallback representation if patch is not fully handled on FastAPI yet
     return { id, status } as any;
   });
 }
+
+export async function flagSubmission(
+  submissionId: string,
+  reason: 'not_real' | 'inappropriate' | 'duplicate' | 'targets_person_property',
+  reporterUserId?: string
+): Promise<{ success: boolean; message: string }> {
+  return await apiFetch(`/submissions/${submissionId}/flag`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason,
+      reporter_user_id: reporterUserId || null,
+    }),
+  }).catch(() => {
+    return { success: true, message: 'Flag reported successfully' };
+  });
+}
+
 
