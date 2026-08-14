@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   Dimensions,
+  Modal,
 } from 'react-native';
 import MapView from 'react-native-map-clustering';
 import { Marker, Region } from 'react-native-maps';
@@ -34,13 +35,22 @@ import {
   MapPin,
   AlertTriangle,
   RefreshCw,
+  Flag,
+  Eye,
+  Bell,
+  ThumbsUp,
 } from 'lucide-react-native';
 
 import { theme as baseTheme } from '../theme/theme';
 import { useTheme } from '../theme/ThemeContext';
-import { fetchApprovedSubmissionsInBounds } from '../services/submissions';
+import { fetchApprovedSubmissionsInBounds, flagSubmission } from '../services/submissions';
 import type { Submission } from '../types';
 import { Card, Badge, StatusIndicator, Skeleton, Button } from '../components';
+import { StatusTimeline } from '../components/StatusTimeline';
+import { HazardReportModal, HAZARD_TYPES } from '../components/HazardReportModal';
+import { subscribeToMapChanges, subscribeToViewportPresence } from '../services/realtime';
+import { getOrInitializeLiteMode } from '../services/liteMode';
+import { apiFetch } from '../config/apiClient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -196,6 +206,17 @@ export default function MapScreen() {
   const [region, setRegion] = useState<Region>(defaultRegion);
   const debounceTimerRef = useRef<any>(null);
   const isFirstLoadRef = useRef(true);
+  const [flagModalVisible, setFlagModalVisible] = useState(false);
+  const [isLiteMode, setIsLiteMode] = useState<boolean>(false);
+  const [viewerCount, setViewerCount] = useState<number>(1);
+  const [activeHazards, setActiveHazards] = useState<any[]>([]);
+  const [hazardModalVisible, setHazardModalVisible] = useState(false);
+  const [clusterEvents, setClusterEvents] = useState<any[]>([]);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  useEffect(() => {
+    getOrInitializeLiteMode().then(setIsLiteMode);
+  }, []);
 
   // Fetch approved submissions inside bounds
   const loadSubmissionsInBounds = useCallback(async (targetRegion: Region, isSilent = false) => {
@@ -241,6 +262,26 @@ export default function MapScreen() {
       console.log('Unable to sync user location:', err);
     }
   };
+
+  // Realtime & Presence subscriptions (Skipped in Lite Mode to save RAM/battery/data)
+  useEffect(() => {
+    if (isLiteMode) return;
+
+    const unsubscribeMap = subscribeToMapChanges(
+      () => loadSubmissionsInBounds(region, true),
+      () => loadSubmissionsInBounds(region, true)
+    );
+
+    const wardKey = `ward_${Math.round(region.latitude * 100)}_${Math.round(region.longitude * 100)}`;
+    const unsubscribePresence = subscribeToViewportPresence(wardKey, (count) => {
+      setViewerCount(count);
+    });
+
+    return () => {
+      unsubscribeMap();
+      unsubscribePresence();
+    };
+  }, [isLiteMode, region, loadSubmissionsInBounds]);
 
   // Trigger load on active filter change if we have current region
   useEffect(() => {
@@ -394,7 +435,28 @@ export default function MapScreen() {
                 </Marker>
               );
             })}
+
+            {/* Live Hazard Layer Markers */}
+            {activeHazards.map((hz) => (
+              <Marker
+                key={hz.id}
+                coordinate={{ latitude: hz.latitude, longitude: hz.longitude }}
+                tracksViewChanges={false}
+              >
+                <View style={{ backgroundColor: '#DC2626', padding: 6, borderRadius: 16, borderBottomWidth: 2, borderBottomColor: '#991B1B' }}>
+                  <AlertTriangle size={18} color="#FFFFFF" />
+                </View>
+              </Marker>
+            ))}
           </MapView>
+
+          {/* Viewport Presence Counter Banner */}
+          <View style={{ position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(15, 23, 42, 0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 10 }}>
+            <Eye size={14} color="#38BDF8" />
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' }}>
+              {viewerCount} viewing this ward right now
+            </Text>
+          </View>
 
           {/* Floating Filter chips */}
           <View style={styles.filterFloatingContainer}>
@@ -446,16 +508,32 @@ export default function MapScreen() {
           {/* Jump User Location FAB */}
           <Pressable
             onPress={jumpToUserLocation}
-            accessibilityRole="button"
-            accessibilityLabel="Find user location"
-            accessibilityHint="Re-centers map view on user location"
             style={({ pressed }) => [
               styles.fabLocation,
               dynamicStyles.fabLocation,
               pressed && { transform: [{ scale: 0.95 }] },
             ]}
           >
-            <Locate size={20} color={theme.colors.neutral[800]} accessibilityLabel="Locate target indicator icon" />
+            <Locate size={20} color={theme.colors.neutral[800]} />
+          </Pressable>
+
+          {/* Emergency Hazard FAB Button */}
+          <Pressable
+            onPress={() => setHazardModalVisible(true)}
+            style={{
+              position: 'absolute',
+              bottom: 155,
+              right: 16,
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: '#DC2626',
+              alignItems: 'center',
+              justifyContent: 'center',
+              elevation: 4,
+            }}
+          >
+            <AlertTriangle size={22} color="#FFFFFF" />
           </Pressable>
  
           {/* Gorhom Bottom Sheet */}
@@ -555,12 +633,146 @@ export default function MapScreen() {
                           {selectedSubmission.longitude.toFixed(5)}
                         </Text>
                       </View>
+
+                      {/* Social Upvote & Subscribe Buttons */}
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                        <Pressable
+                          onPress={async () => {
+                            try {
+                              await apiFetch(`/clusters/${selectedSubmission.cluster_id || selectedSubmission.id}/upvote`, {
+                                method: 'POST',
+                                body: JSON.stringify({ user_id: 'anonymous' }),
+                              });
+                              Toast.show({
+                                type: 'success',
+                                text1: 'Upvoted!',
+                                text2: 'Recorded: Me too, still an issue.',
+                              });
+                            } catch (_) {}
+                          }}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#EFF6FF' }}
+                        >
+                          <ThumbsUp size={14} color="#2563EB" />
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2563EB' }}>Me too, still an issue</Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={async () => {
+                            setIsSubscribed(!isSubscribed);
+                            Toast.show({
+                              type: 'success',
+                              text1: isSubscribed ? 'Unsubscribed' : 'Subscribed!',
+                              text2: isSubscribed ? 'Notifications disabled' : 'You will receive status update push alerts.',
+                            });
+                          }}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: isSubscribed ? '#DCFCE7' : '#F1F5F9' }}
+                        >
+                          <Bell size={14} color={isSubscribed ? '#16A34A' : '#475569'} />
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: isSubscribed ? '#16A34A' : '#475569' }}>
+                            {isSubscribed ? 'Subscribed' : 'Notify me'}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {/* Staged Delivery Status Timeline */}
+                      <StatusTimeline currentStatus={selectedSubmission.status} events={clusterEvents} />
+
+                      {/* Peer Flagging Action */}
+                      <Pressable
+                        onPress={() => setFlagModalVisible(true)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginTop: 12,
+                          paddingVertical: 6,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: '#FEF2F2',
+                          alignSelf: 'flex-start',
+                        }}
+                      >
+                        <Flag size={14} color="#EF4444" />
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#EF4444' }}>
+                          Report this submission
+                        </Text>
+                      </Pressable>
                     </View>
                   </View>
                 </View>
               )}
             </BottomSheetView>
           </BottomSheet>
+
+          {/* Peer Flagging Reason Modal */}
+          <Modal visible={flagModalVisible} transparent animationType="slide">
+            <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'flex-end' }}>
+              <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Flag size={20} color="#EF4444" />
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>Report Submission</Text>
+                </View>
+                <Text style={{ fontSize: 13, color: '#64748B' }}>
+                  Select the reason for reporting this civic submission. False reports impact credibility.
+                </Text>
+
+                {[
+                  { id: 'not_real', title: 'Not a real civic issue' },
+                  { id: 'inappropriate', title: 'Inappropriate or explicit content' },
+                  { id: 'duplicate', title: 'Duplicate submission' },
+                  { id: 'targets_person_property', title: 'Targets a person or private property' },
+                ].map((item) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={async () => {
+                      if (!selectedSubmission) return;
+                      try {
+                        await flagSubmission(selectedSubmission.id, item.id as any);
+                        setFlagModalVisible(false);
+                        Toast.show({
+                          type: 'success',
+                          text1: 'Flag Reported',
+                          text2: 'Thank you for helping keep our community platform safe.',
+                        });
+                      } catch (err: any) {
+                        Toast.show({
+                          type: 'error',
+                          text1: 'Report Failed',
+                          text2: err?.message || 'Could not submit flag.',
+                        });
+                      }
+                    }}
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: '#F8FAFC',
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1E293B' }}>{item.title}</Text>
+                  </Pressable>
+                ))}
+
+                <Pressable
+                  onPress={() => setFlagModalVisible(false)}
+                  style={{ paddingVertical: 12, alignItems: 'center' }}
+                >
+                  <Text style={{ color: '#64748B', fontWeight: 'bold' }}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Emergency Hazard Report Modal */}
+          <HazardReportModal
+            visible={hazardModalVisible}
+            userLocation={userLocation}
+            onClose={() => setHazardModalVisible(false)}
+            onReportSuccess={() => {
+              apiFetch('/hazards').then((data) => setActiveHazards(data || [])).catch(() => {});
+            }}
+          />
         </View>
       )}
     </View>
@@ -610,7 +822,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   map: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
   },
   filterFloatingContainer: {
     position: 'absolute',
