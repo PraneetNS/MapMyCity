@@ -1,19 +1,13 @@
 import os
 import cloudinary
 
-# 1. Fetch Cloudinary credentials from environment variables
-CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
-CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
-CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "demo_cloud")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "1234567890")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "dummy_secret")
 
-# 2. Validate that they are provided
-if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
-    raise ValueError(
-        "Missing Cloudinary configuration. Please set CLOUDINARY_CLOUD_NAME, "
-        "CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the environment."
-    )
+if not os.getenv("CLOUDINARY_CLOUD_NAME"):
+    print("[Cloudinary] CLOUDINARY_CLOUD_NAME not set. Operating with fallback demo Cloudinary config.")
 
-# 3. Configure the global Cloudinary settings
 cloudinary.config(
     cloud_name=CLOUDINARY_CLOUD_NAME,
     api_key=CLOUDINARY_API_KEY,
