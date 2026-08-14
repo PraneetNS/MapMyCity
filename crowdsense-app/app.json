@@ -22,10 +22,16 @@
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.crowdsense.app",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sqlite"
+    ]
   }
 }
