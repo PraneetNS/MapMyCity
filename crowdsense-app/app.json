@@ -4,9 +4,9 @@
     "slug": "crowdsense-app",
     "version": "1.0.0",
     "jsEngine": "hermes",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,7 +14,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.crowdsense.app"
+      "bundleIdentifier": "com.crowdsense.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CrowdSense uses your camera to take clear photos of road hazards, potholes, and civic infrastructure issues.",
+        "NSPhotoLibraryUsageDescription": "CrowdSense accesses your photo library so you can select and attach photos of civic issues to your report.",
+        "NSLocationWhenInUseUsageDescription": "CrowdSense uses your location while using the app to accurately map civic issues and display nearby hazard alerts in your ward.",
+        "NSMicrophoneUsageDescription": "CrowdSense uses your microphone to transcribe voice reports on-device. Raw audio is processed locally and never leaves your device."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,6 +28,13 @@
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.crowdsense.app",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false,
       "enableProguardInReleaseBuilds": true,
       "enableShrinkResourcesInReleaseBuilds": true

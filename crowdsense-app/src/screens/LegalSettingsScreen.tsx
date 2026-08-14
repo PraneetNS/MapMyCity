@@ -168,10 +168,10 @@ export default function LegalSettingsScreen() {
 
         <Pressable
           style={styles.menuRow}
-          onPress={() => setModalContent({ title: 'Privacy Policy', body: PRIVACY_POLICY_MD })}
+          onPress={() => setModalContent({ title: 'Privacy Policy & DPDP Disclosure', body: PRIVACY_POLICY_MD })}
         >
           <ShieldCheck size={20} color="#334155" />
-          <Text style={styles.menuText}>Privacy Policy</Text>
+          <Text style={styles.menuText}>Privacy Policy (DPDP Act)</Text>
           <ChevronRight size={18} color="#94A3B8" />
         </Pressable>
 
@@ -180,7 +180,7 @@ export default function LegalSettingsScreen() {
           onPress={() =>
             Alert.alert(
               'Nodal Grievance Officer',
-              `Name: ${GRIEVANCE_OFFICER.name}\nEmail: ${GRIEVANCE_OFFICER.email}\nTimeline: ${GRIEVANCE_OFFICER.responseTimeline}`,
+              `Name: ${GRIEVANCE_OFFICER.name}\nEmail: ${GRIEVANCE_OFFICER.email}\nAddress: ${GRIEVANCE_OFFICER.address}\nTimeline: ${GRIEVANCE_OFFICER.responseTimeline}`,
               [{ text: 'OK' }]
             )
           }
@@ -198,7 +198,7 @@ export default function LegalSettingsScreen() {
           <Download size={20} color="#0284C7" />
           <View style={{ flex: 1 }}>
             <Text style={styles.actionTitle}>Export My Data</Text>
-            <Text style={styles.actionSubtitle}>Download JSON bundle of your personal data & reports</Text>
+            <Text style={styles.actionSubtitle}>Download full JSON bundle of your personal data & reports</Text>
           </View>
         </Pressable>
 
@@ -206,7 +206,7 @@ export default function LegalSettingsScreen() {
           <Trash2 size={20} color="#DC2626" />
           <View style={{ flex: 1 }}>
             <Text style={[styles.actionTitle, { color: '#DC2626' }]}>Delete Account & Personal Data</Text>
-            <Text style={styles.actionSubtitle}>Erase phone hash and identity while keeping anonymized map data</Text>
+            <Text style={styles.actionSubtitle}>Erase phone hash and identity while keeping unlinked map data</Text>
           </View>
         </Pressable>
       </View>

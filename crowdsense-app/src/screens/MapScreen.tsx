@@ -6,7 +6,6 @@ import {
   Image,
   ScrollView,
   Pressable,
-  Dimensions,
   Modal,
 } from 'react-native';
 import MapView from 'react-native-map-clustering';
@@ -20,8 +19,6 @@ import Animated, {
   withRepeat,
   withTiming,
   withSequence,
-  FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import {
@@ -34,25 +31,30 @@ import {
   Clock,
   MapPin,
   AlertTriangle,
-  RefreshCw,
   Flag,
   Eye,
   Bell,
   ThumbsUp,
+  X,
+  Layers,
 } from 'lucide-react-native';
 
 import { theme as baseTheme } from '../theme/theme';
 import { useTheme } from '../theme/ThemeContext';
+import { useResponsive } from '../hooks/useResponsive';
 import { fetchApprovedSubmissionsInBounds, flagSubmission } from '../services/submissions';
 import type { Submission } from '../types';
-import { Card, Badge, StatusIndicator, Skeleton, Button } from '../components';
+import { Skeleton, Button, StatusIndicator } from '../components';
 import { StatusTimeline } from '../components/StatusTimeline';
-import { HazardReportModal, HAZARD_TYPES } from '../components/HazardReportModal';
+import { HazardReportModal } from '../components/HazardReportModal';
+import { PermissionPromptModal } from '../components/PermissionPromptModal';
+import {
+  checkPermissionStatus,
+  requestNativePermission,
+} from '../services/permissionManager';
 import { subscribeToMapChanges, subscribeToViewportPresence } from '../services/realtime';
 import { getOrInitializeLiteMode } from '../services/liteMode';
 import { apiFetch } from '../config/apiClient';
-
-const { width, height } = Dimensions.get('window');
 
 const defaultRegion = {
   latitude: 40.7128,
@@ -97,12 +99,6 @@ const PulseMarker = ({
     };
   });
 
-  const dynamicStyles = StyleSheet.create({
-    markerPin: {
-      borderColor: theme.colors.white,
-    },
-  });
-
   return (
     <View style={styles.markerWrapper}>
       {isNew && (
@@ -110,7 +106,7 @@ const PulseMarker = ({
           style={[styles.markerPulse, { backgroundColor: color }, pulseStyle]}
         />
       )}
-      <View style={[styles.markerPin, dynamicStyles.markerPin, { backgroundColor: color }]}>
+      <View style={[styles.markerPin, { borderColor: theme.colors.white, backgroundColor: color }]}>
         {icon}
       </View>
       <View style={[styles.markerTriangle, { borderTopColor: color }]} />
@@ -120,6 +116,7 @@ const PulseMarker = ({
 
 export default function MapScreen() {
   const { theme, isDark } = useTheme();
+  const { isMasterDetail, insets, width } = useResponsive();
   const mapRef = useRef<any>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
 
@@ -133,10 +130,14 @@ export default function MapScreen() {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('all');
 
-  // Bottom Sheet snap points
+  // Permission Prompt State
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [isLocationBlocked, setIsLocationBlocked] = useState(false);
+
+  // Bottom Sheet snap points for phone portrait
   const snapPoints = useMemo(() => ['42%'], []);
 
-  // Category list configuration with dynamic theme colors for WCAG AA compliance
+  // Category list configuration
   const filters = useMemo(() => [
     { id: 'all', title: 'All Issues', icon: null, color: theme.colors.primary },
     { id: 'pothole', title: 'Potholes', icon: <Cone size={14} color={theme.colors.status.rejected} />, color: theme.colors.status.rejected },
@@ -145,63 +146,6 @@ export default function MapScreen() {
     { id: 'accessibility', title: 'Accessibility', icon: <Accessibility size={14} color={theme.colors.status.approved} />, color: theme.colors.status.approved },
     { id: 'infrastructure', title: 'Infrastructure', icon: <Hammer size={14} color={theme.colors.status.flagged} />, color: theme.colors.status.flagged },
   ], [theme]);
-
-  // Dynamic Styles
-  const dynamicStyles = StyleSheet.create({
-    container: {
-      backgroundColor: theme.colors.neutral[100],
-    },
-    errorContainer: {
-      backgroundColor: theme.colors.neutral[100],
-    },
-    errorTitle: {
-      color: theme.colors.neutral[900],
-    },
-    errorText: {
-      color: theme.colors.neutral[600],
-    },
-    chipInactive: {
-      backgroundColor: theme.colors.white,
-      borderColor: theme.colors.neutral[200],
-    },
-    chipTextInactive: {
-      color: theme.colors.neutral[600],
-    },
-    fabLocation: {
-      backgroundColor: theme.colors.white,
-      borderColor: theme.colors.neutral[200],
-    },
-    bottomSheetBg: {
-      backgroundColor: theme.colors.white,
-    },
-    bottomSheetIndicator: {
-      backgroundColor: theme.colors.neutral[300],
-    },
-    detailTitle: {
-      color: theme.colors.neutral[900],
-    },
-    detailTime: {
-      color: theme.colors.neutral[500],
-    },
-    detailPhoto: {
-      backgroundColor: theme.colors.neutral[200],
-    },
-    violationContainer: {
-      backgroundColor: theme.colors.neutral[200],
-    },
-    violationText: {
-      color: theme.colors.neutral[600],
-    },
-    notesLabel: {
-      color: theme.colors.neutral[400],
-    },
-    detailNotes: {
-      color: theme.colors.neutral[700],
-    },
-    coordinatesText: {
-      color: theme.colors.neutral[500],
-    },
-  });
 
   const [region, setRegion] = useState<Region>(defaultRegion);
   const debounceTimerRef = useRef<any>(null);
@@ -236,7 +180,7 @@ export default function MapScreen() {
         minLon,
         maxLat,
         maxLon,
-        missionType: activeFilter !== 'all' ? activeFilter : undefined
+        missionType: activeFilter !== 'all' ? activeFilter : undefined,
       });
       setSubmissions(data);
     } catch (err: any) {
@@ -247,11 +191,22 @@ export default function MapScreen() {
     }
   }, [activeFilter]);
 
-  // Fetch user location
-  const syncUserLocation = async () => {
+  // Just-in-time user location sync
+  const syncUserLocation = async (showPromptIfDenied = false) => {
+    const status = await checkPermissionStatus('location_foreground');
+    if (status === 'blocked') {
+      setIsLocationBlocked(true);
+      if (showPromptIfDenied) setPermissionModalVisible(true);
+      return null;
+    }
+    if (status !== 'granted') {
+      if (showPromptIfDenied) {
+        setPermissionModalVisible(true);
+      }
+      return null;
+    }
+
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setUserLocation({
         latitude: loc.coords.latitude,
@@ -260,10 +215,29 @@ export default function MapScreen() {
       return loc;
     } catch (err) {
       console.log('Unable to sync user location:', err);
+      return null;
     }
   };
 
-  // Realtime & Presence subscriptions (Skipped in Lite Mode to save RAM/battery/data)
+  const handleGrantLocation = async () => {
+    setPermissionModalVisible(false);
+    const result = await requestNativePermission('location_foreground');
+    if (result === 'granted') {
+      const loc = await syncUserLocation();
+      if (loc && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        }, 1000);
+      }
+    } else if (result === 'blocked') {
+      setIsLocationBlocked(true);
+    }
+  };
+
+  // Realtime subscriptions
   useEffect(() => {
     if (isLiteMode) return;
 
@@ -283,16 +257,14 @@ export default function MapScreen() {
     };
   }, [isLiteMode, region, loadSubmissionsInBounds]);
 
-  // Trigger load on active filter change if we have current region
   useEffect(() => {
     if (region) {
       loadSubmissionsInBounds(region, true);
     }
   }, [activeFilter, loadSubmissionsInBounds]);
 
-  // Initialize user location and cleanup timer
   useEffect(() => {
-    syncUserLocation();
+    syncUserLocation(false);
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -302,21 +274,18 @@ export default function MapScreen() {
 
   const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
-    
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
-    
     debounceTimerRef.current = setTimeout(() => {
       loadSubmissionsInBounds(newRegion, isFirstLoadRef.current ? false : true);
       isFirstLoadRef.current = false;
     }, 300);
   };
 
-  // Jump Map to current location FAB action
   const jumpToUserLocation = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const loc = await syncUserLocation();
+    const loc = await syncUserLocation(true);
     if (loc && mapRef.current) {
       mapRef.current.animateToRegion({
         latitude: loc.coords.latitude,
@@ -324,403 +293,435 @@ export default function MapScreen() {
         latitudeDelta: 0.015,
         longitudeDelta: 0.015,
       }, 1000);
-    } else {
-      Toast.show({
-        type: 'error',
-        text1: 'Location sync failed',
-        text2: 'Make sure GPS is enabled and permissions are granted.',
-      });
     }
   };
 
-  // On marker select
   const handleMarkerPress = (submission: Submission) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedSubmission(submission);
-    bottomSheetRef.current?.expand();
-  };
-
-  // Get icon for marker based on type
-  const getMarkerIcon = (type: string, color: string) => {
-    switch (type) {
-      case 'pothole':
-        return <Cone size={14} color={color} accessibilityLabel="Pothole icon" />;
-      case 'garbage':
-        return <Trash2 size={14} color={color} accessibilityLabel="Garbage icon" />;
-      case 'noise':
-        return <Volume2 size={14} color={color} accessibilityLabel="Noise icon" />;
-      case 'accessibility':
-        return <Accessibility size={14} color={color} accessibilityLabel="Accessibility icon" />;
-      case 'infrastructure':
-        return <Hammer size={14} color={color} accessibilityLabel="Infrastructure icon" />;
-      default:
-        return <MapPin size={14} color={color} accessibilityLabel="Location pinpoint icon" />;
+    if (!isMasterDetail) {
+      bottomSheetRef.current?.expand();
     }
   };
 
-  // Filter submissions list client side
+  const getMarkerIcon = (type: string, color: string) => {
+    switch (type) {
+      case 'pothole':
+        return <Cone size={14} color={color} />;
+      case 'garbage':
+        return <Trash2 size={14} color={color} />;
+      case 'noise':
+        return <Volume2 size={14} color={color} />;
+      case 'accessibility':
+        return <Accessibility size={14} color={color} />;
+      case 'infrastructure':
+        return <Hammer size={14} color={color} />;
+      default:
+        return <MapPin size={14} color={color} />;
+    }
+  };
+
   const filteredSubmissions = useMemo(() => {
     if (activeFilter === 'all') return submissions;
     return submissions.filter((s) => s.mission_type === activeFilter);
   }, [submissions, activeFilter]);
 
-  // Check if marker was created within last 24 hours to trigger pulse animation
   const isSubmissionNew = (dateString: string) => {
     const reportDate = new Date(dateString).getTime();
     const now = new Date().getTime();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    return now - reportDate < twentyFourHours;
+    return now - reportDate < 24 * 60 * 60 * 1000;
   };
 
+  // Render detail view (used in both Tablet Side Panel and Phone Bottom Sheet)
+  const renderDetailContent = (sub: Submission) => (
+    <ScrollView style={styles.detailScrollView} contentContainerStyle={styles.detailScrollContent}>
+      {/* Category Header */}
+      <View style={styles.detailHeader}>
+        <View style={styles.detailTitleRow}>
+          <View
+            style={[
+              styles.detailIconBadge,
+              {
+                backgroundColor:
+                  filters.find((f) => f.id === sub.mission_type)?.color + '20' || '#5b21b620',
+              },
+            ]}
+          >
+            {getMarkerIcon(
+              sub.mission_type,
+              filters.find((f) => f.id === sub.mission_type)?.color || theme.colors.primary
+            )}
+          </View>
+          <View>
+            <Text style={[styles.detailTitle, { color: theme.colors.neutral[900] }]}>
+              {sub.mission_type.charAt(0).toUpperCase() + sub.mission_type.slice(1)}
+            </Text>
+            <View style={styles.timeRow}>
+              <Clock size={12} color={theme.colors.neutral[400]} />
+              <Text style={[styles.detailTime, { color: theme.colors.neutral[500] }]}>
+                {new Date(sub.captured_at).toLocaleString()}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <StatusIndicator status={sub.status} />
+      </View>
+
+      {/* Before / After Photo Stack */}
+      {sub.resolution_photo_url ? (
+        <View style={styles.beforeAfterContainer}>
+          <View style={styles.photoWrapper}>
+            <Image source={{ uri: sub.photo_url }} style={styles.detailPhotoBefore} />
+            <View style={styles.photoLabelBadge}>
+              <Text style={styles.photoLabelText}>Before</Text>
+            </View>
+          </View>
+          <View style={styles.photoWrapper}>
+            <Image source={{ uri: sub.resolution_photo_url }} style={styles.detailPhotoAfter} />
+            <View style={[styles.photoLabelBadge, { backgroundColor: theme.colors.status.approved }]}>
+              <Text style={styles.photoLabelText}>After</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <Image
+          source={{ uri: sub.photo_url }}
+          style={[styles.detailPhoto, { backgroundColor: theme.colors.neutral[200] }]}
+        />
+      )}
+
+      {/* Notes & Location metadata */}
+      <View style={styles.detailTextWrapper}>
+        <Text style={[styles.notesLabel, { color: theme.colors.neutral[400] }]}>Notes</Text>
+        <Text style={[styles.detailNotes, { color: theme.colors.neutral[700] }]}>
+          {sub.notes || 'No description provided by reporter.'}
+        </Text>
+        <View style={styles.coordinatesWrapper}>
+          <MapPin size={12} color={theme.colors.neutral[500]} />
+          <Text style={[styles.coordinatesText, { color: theme.colors.neutral[500] }]}>
+            Lat {sub.latitude.toFixed(5)}, Lon {sub.longitude.toFixed(5)}
+          </Text>
+        </View>
+
+        {/* Upvote & Notifications Action Buttons */}
+        <View style={styles.actionRow}>
+          <Pressable
+            onPress={async () => {
+              try {
+                await apiFetch(`/clusters/${sub.cluster_id || sub.id}/upvote`, {
+                  method: 'POST',
+                  body: JSON.stringify({ user_id: 'anonymous' }),
+                });
+                Toast.show({
+                  type: 'success',
+                  text1: 'Upvoted!',
+                  text2: 'Recorded: Me too, still an issue.',
+                });
+              } catch (_) {}
+            }}
+            style={[styles.actionBtn, { backgroundColor: '#EFF6FF' }]}
+          >
+            <ThumbsUp size={14} color="#2563EB" />
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2563EB' }}>
+              Me too, still an issue
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setIsSubscribed(!isSubscribed);
+              Toast.show({
+                type: 'success',
+                text1: isSubscribed ? 'Unsubscribed' : 'Subscribed!',
+                text2: isSubscribed ? 'Notifications disabled' : 'You will receive status update push alerts.',
+              });
+            }}
+            style={[styles.actionBtn, { backgroundColor: isSubscribed ? '#DCFCE7' : '#F1F5F9' }]}
+          >
+            <Bell size={14} color={isSubscribed ? '#16A34A' : '#475569'} />
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: isSubscribed ? '#16A34A' : '#475569' }}>
+              {isSubscribed ? 'Subscribed' : 'Notify me'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Status Timeline Progress Stepper */}
+        <StatusTimeline currentStatus={sub.status} events={clusterEvents} />
+
+        {/* Flagging Action */}
+        <Pressable
+          onPress={() => setFlagModalVisible(true)}
+          style={[styles.flagBtn, { backgroundColor: '#FEF2F2' }]}
+        >
+          <Flag size={14} color="#EF4444" />
+          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#EF4444' }}>
+            Report this submission
+          </Text>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+
   return (
-    <View style={[styles.container, dynamicStyles.container]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.neutral[100] }]}>
       {loading ? (
         <View style={styles.skeletonContainer}>
-          <Skeleton height={60} style={styles.skeletonHeader} />
-          <Skeleton height={height - 180} style={styles.skeletonMap} />
+          <Skeleton height={60} style={{ marginTop: insets.top }} />
+          <Skeleton height={300} style={{ flex: 1 }} />
         </View>
       ) : error ? (
-        <View style={[styles.errorContainer, dynamicStyles.errorContainer]}>
-          <AlertTriangle size={48} color={theme.colors.status.rejected} style={styles.errorIcon} accessibilityLabel="Alert icon" />
-          <Text style={[styles.errorTitle, dynamicStyles.errorTitle]}>Database Sync Failed</Text>
-          <Text style={[styles.errorText, dynamicStyles.errorText]}>{error}</Text>
+        <View style={styles.errorContainer}>
+          <AlertTriangle size={48} color={theme.colors.status.rejected} />
+          <Text style={[styles.errorTitle, { color: theme.colors.neutral[900] }]}>
+            Database Sync Failed
+          </Text>
+          <Text style={[styles.errorText, { color: theme.colors.neutral[600] }]}>{error}</Text>
           <Button
             title="Retry Connection"
             onPress={() => loadSubmissionsInBounds(region || defaultRegion)}
             variant="primary"
-            style={styles.retryButton}
+            style={{ width: 200, marginTop: 16 }}
           />
         </View>
       ) : (
-        <View style={styles.mapContainer}>
-          {/* Map Clustering component */}
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={
-              userLocation
-                ? {
-                    latitude: userLocation.latitude,
-                    longitude: userLocation.longitude,
-                    latitudeDelta: 0.03,
-                    longitudeDelta: 0.03,
-                  }
-                : defaultRegion
-            }
-            clusterColor={theme.colors.primary}
-            clusterTextColor={theme.colors.white}
-            animationEnabled={true}
-            radius={40}
-            maxZoom={16}
-            onRegionChangeComplete={handleRegionChangeComplete}
-            accessibilityLabel="Interactive map showing civic issue submissions"
-          >
-            {filteredSubmissions.map((sub) => {
-              const filterConfig = filters.find((f) => f.id === sub.mission_type);
-              const color = filterConfig ? filterConfig.color : theme.colors.primary;
-              const isNew = isSubmissionNew(sub.submitted_at || sub.captured_at);
-
-              return (
-                <Marker
-                  key={sub.id}
-                  coordinate={{ latitude: sub.latitude, longitude: sub.longitude }}
-                  onPress={() => handleMarkerPress(sub)}
-                  tracksViewChanges={false}
-                >
-                  <PulseMarker
-                    color={color}
-                    icon={getMarkerIcon(sub.mission_type, theme.colors.white)}
-                    isNew={isNew}
-                  />
-                </Marker>
-              );
-            })}
-
-            {/* Live Hazard Layer Markers */}
-            {activeHazards.map((hz) => (
-              <Marker
-                key={hz.id}
-                coordinate={{ latitude: hz.latitude, longitude: hz.longitude }}
-                tracksViewChanges={false}
-              >
-                <View style={{ backgroundColor: '#DC2626', padding: 6, borderRadius: 16, borderBottomWidth: 2, borderBottomColor: '#991B1B' }}>
-                  <AlertTriangle size={18} color="#FFFFFF" />
-                </View>
-              </Marker>
-            ))}
-          </MapView>
-
-          {/* Viewport Presence Counter Banner */}
-          <View style={{ position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(15, 23, 42, 0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 10 }}>
-            <Eye size={14} color="#38BDF8" />
-            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' }}>
-              {viewerCount} viewing this ward right now
-            </Text>
-          </View>
-
-          {/* Floating Filter chips */}
-          <View style={styles.filterFloatingContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScroll}
+        <View style={[styles.mainLayout, isMasterDetail && styles.masterDetailContainer]}>
+          {/* Main Map Canvas Pane */}
+          <View style={[styles.mapPane, isMasterDetail && { flex: 1 }]}>
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              initialRegion={
+                userLocation
+                  ? {
+                      latitude: userLocation.latitude,
+                      longitude: userLocation.longitude,
+                      latitudeDelta: 0.03,
+                      longitudeDelta: 0.03,
+                    }
+                  : defaultRegion
+              }
+              clusterColor={theme.colors.primary}
+              clusterTextColor={theme.colors.white}
+              animationEnabled={true}
+              radius={40}
+              maxZoom={16}
+              onRegionChangeComplete={handleRegionChangeComplete}
             >
-              {filters.map((f) => {
-                const isActive = activeFilter === f.id;
+              {filteredSubmissions.map((sub) => {
+                const filterConfig = filters.find((f) => f.id === sub.mission_type);
+                const color = filterConfig ? filterConfig.color : theme.colors.primary;
+                const isNew = isSubmissionNew(sub.submitted_at || sub.captured_at);
+
                 return (
-                  <Pressable
-                    key={f.id}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setActiveFilter(f.id);
-                      bottomSheetRef.current?.close();
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Filter by category: ${f.title}`}
-                    accessibilityState={{ selected: isActive }}
-                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                    style={[
-                      styles.chip,
-                      isActive ? { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary } : dynamicStyles.chipInactive,
-                    ]}
+                  <Marker
+                    key={sub.id}
+                    coordinate={{ latitude: sub.latitude, longitude: sub.longitude }}
+                    onPress={() => handleMarkerPress(sub)}
+                    tracksViewChanges={false}
                   >
-                    {f.icon && (
-                      <View style={styles.chipIcon}>
-                        {React.cloneElement(f.icon, {
-                          color: isActive ? theme.colors.white : theme.colors.neutral[500],
-                        })}
-                      </View>
-                    )}
-                    <Text
-                      style={[
-                        styles.chipText,
-                        isActive ? styles.chipTextActive : dynamicStyles.chipTextInactive,
-                      ]}
-                    >
-                      {f.title}
-                    </Text>
-                  </Pressable>
+                    <PulseMarker
+                      color={color}
+                      icon={getMarkerIcon(sub.mission_type, theme.colors.white)}
+                      isNew={isNew}
+                    />
+                  </Marker>
                 );
               })}
-            </ScrollView>
-          </View>
- 
-          {/* Jump User Location FAB */}
-          <Pressable
-            onPress={jumpToUserLocation}
-            style={({ pressed }) => [
-              styles.fabLocation,
-              dynamicStyles.fabLocation,
-              pressed && { transform: [{ scale: 0.95 }] },
-            ]}
-          >
-            <Locate size={20} color={theme.colors.neutral[800]} />
-          </Pressable>
 
-          {/* Emergency Hazard FAB Button */}
-          <Pressable
-            onPress={() => setHazardModalVisible(true)}
-            style={{
-              position: 'absolute',
-              bottom: 155,
-              right: 16,
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: '#DC2626',
-              alignItems: 'center',
-              justifyContent: 'center',
-              elevation: 4,
-            }}
-          >
-            <AlertTriangle size={22} color="#FFFFFF" />
-          </Pressable>
- 
-          {/* Gorhom Bottom Sheet */}
-          <BottomSheet
-            ref={bottomSheetRef}
-            index={-1}
-            snapPoints={snapPoints}
-            enablePanDownToClose={true}
-            backgroundStyle={[styles.bottomSheetBg, dynamicStyles.bottomSheetBg]}
-            handleIndicatorStyle={[styles.bottomSheetIndicator, dynamicStyles.bottomSheetIndicator]}
-          >
-            <BottomSheetView style={styles.bottomSheetContent}>
-              {selectedSubmission && (
-                <View style={styles.detailContainer}>
-                  {/* Category Details */}
-                  <View style={styles.detailHeader}>
-                    <View style={styles.detailTitleRow}>
-                      <View
+              {activeHazards.map((hz) => (
+                <Marker
+                  key={hz.id}
+                  coordinate={{ latitude: hz.latitude, longitude: hz.longitude }}
+                  tracksViewChanges={false}
+                >
+                  <View style={styles.hazardMarker}>
+                    <AlertTriangle size={18} color="#FFFFFF" />
+                  </View>
+                </Marker>
+              ))}
+            </MapView>
+
+            {/* Viewport Presence Counter */}
+            <View
+              style={[
+                styles.presenceBadge,
+                { top: Math.max(insets.top + 8, 12), right: 12 },
+              ]}
+            >
+              <Eye size={14} color="#38BDF8" />
+              <Text style={styles.presenceText}>{viewerCount} viewing this ward</Text>
+            </View>
+
+            {/* Floating Filter Chips */}
+            <View
+              style={[
+                styles.filterFloatingContainer,
+                { top: Math.max(insets.top + 8, 12), left: 12, right: isMasterDetail ? 200 : 180 },
+              ]}
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+              >
+                {filters.map((f) => {
+                  const isActive = activeFilter === f.id;
+                  return (
+                    <Pressable
+                      key={f.id}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveFilter(f.id);
+                        if (!isMasterDetail) bottomSheetRef.current?.close();
+                      }}
+                      style={[
+                        styles.chip,
+                        isActive
+                          ? { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                          : { backgroundColor: theme.colors.white, borderColor: theme.colors.neutral[200] },
+                      ]}
+                    >
+                      {f.icon && (
+                        <View style={styles.chipIcon}>
+                          {React.cloneElement(f.icon, {
+                            color: isActive ? theme.colors.white : theme.colors.neutral[500],
+                          })}
+                        </View>
+                      )}
+                      <Text
                         style={[
-                          styles.detailIconBadge,
-                          {
-                            backgroundColor:
-                              filters.find((f) => f.id === selectedSubmission.mission_type)
-                                ?.color + '20' || '#5b21b620',
-                          },
+                          styles.chipText,
+                          { color: isActive ? theme.colors.white : theme.colors.neutral[600] },
                         ]}
                       >
-                        {getMarkerIcon(
-                          selectedSubmission.mission_type,
-                          filters.find((f) => f.id === selectedSubmission.mission_type)?.color ||
-                            theme.colors.primary
-                        )}
-                      </View>
-                      <View>
-                        <Text style={[styles.detailTitle, dynamicStyles.detailTitle]}>
-                          {selectedSubmission.mission_type.charAt(0).toUpperCase() +
-                            selectedSubmission.mission_type.slice(1)}
-                        </Text>
-                        <View style={styles.timeRow}>
-                          <Clock size={12} color={theme.colors.neutral[400]} accessibilityLabel="Clock icon" />
-                          <Text style={[styles.detailTime, dynamicStyles.detailTime]}>
-                            {new Date(selectedSubmission.captured_at).toLocaleString()}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <StatusIndicator status={selectedSubmission.status} />
-                  </View>
- 
-                  {/* Body Content */}
-                  <View style={selectedSubmission.resolution_photo_url ? styles.detailBodyStacked : styles.detailBody}>
-                    {selectedSubmission.resolution_photo_url ? (
-                      <View style={styles.beforeAfterContainer}>
-                        <View style={styles.photoWrapper}>
-                          <Image
-                            source={{ uri: selectedSubmission.photo_url }}
-                            style={styles.detailPhotoBefore}
-                            accessibilityLabel="Photo before resolution"
-                          />
-                          <View style={styles.photoLabelBadge}>
-                            <Text style={styles.photoLabelText}>Before</Text>
-                          </View>
-                        </View>
-                        <View style={styles.photoWrapper}>
-                          <Image
-                            source={{ uri: selectedSubmission.resolution_photo_url }}
-                            style={styles.detailPhotoAfter}
-                            accessibilityLabel="Photo after resolution"
-                          />
-                          <View style={[styles.photoLabelBadge, { backgroundColor: theme.colors.status.approved }]}>
-                            <Text style={styles.photoLabelText}>After</Text>
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      selectedSubmission.flags && selectedSubmission.flags.includes('auto_rejected_content_policy') ? (
-                        <View style={[styles.detailPhoto, styles.violationContainer, dynamicStyles.violationContainer]}>
-                          <Text style={[styles.violationText, dynamicStyles.violationText]}>This submission violated content guidelines</Text>
-                        </View>
-                      ) : (
-                        <Image
-                          source={{ uri: selectedSubmission.photo_url }}
-                          style={[styles.detailPhoto, dynamicStyles.detailPhoto]}
-                          accessibilityLabel="Civic issue photo review"
-                        />
-                      )
-                    )}
-                    <View style={selectedSubmission.resolution_photo_url ? styles.detailTextWrapperFull : styles.detailTextWrapper}>
-                      <Text style={[styles.notesLabel, dynamicStyles.notesLabel]}>Notes</Text>
-                      <Text style={[styles.detailNotes, dynamicStyles.detailNotes]}>
-                        {selectedSubmission.notes || 'No description added by reporter.'}
+                        {f.title}
                       </Text>
-                      <View style={styles.coordinatesWrapper}>
-                        <MapPin size={12} color={theme.colors.neutral[500]} accessibilityLabel="Pin icon" />
-                        <Text style={[styles.coordinatesText, dynamicStyles.coordinatesText]}>
-                          Lat {selectedSubmission.latitude.toFixed(5)}, Lon{' '}
-                          {selectedSubmission.longitude.toFixed(5)}
-                        </Text>
-                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-                      {/* Social Upvote & Subscribe Buttons */}
-                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                        <Pressable
-                          onPress={async () => {
-                            try {
-                              await apiFetch(`/clusters/${selectedSubmission.cluster_id || selectedSubmission.id}/upvote`, {
-                                method: 'POST',
-                                body: JSON.stringify({ user_id: 'anonymous' }),
-                              });
-                              Toast.show({
-                                type: 'success',
-                                text1: 'Upvoted!',
-                                text2: 'Recorded: Me too, still an issue.',
-                              });
-                            } catch (_) {}
-                          }}
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#EFF6FF' }}
-                        >
-                          <ThumbsUp size={14} color="#2563EB" />
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2563EB' }}>Me too, still an issue</Text>
-                        </Pressable>
+            {/* Floating Action Buttons respecting safe areas */}
+            <Pressable
+              onPress={jumpToUserLocation}
+              style={[
+                styles.fabLocation,
+                {
+                  bottom: Math.max(insets.bottom + 90, 100),
+                  backgroundColor: theme.colors.white,
+                  borderColor: theme.colors.neutral[200],
+                },
+              ]}
+            >
+              <Locate size={20} color={theme.colors.neutral[800]} />
+            </Pressable>
 
-                        <Pressable
-                          onPress={async () => {
-                            setIsSubscribed(!isSubscribed);
-                            Toast.show({
-                              type: 'success',
-                              text1: isSubscribed ? 'Unsubscribed' : 'Subscribed!',
-                              text2: isSubscribed ? 'Notifications disabled' : 'You will receive status update push alerts.',
-                            });
-                          }}
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: isSubscribed ? '#DCFCE7' : '#F1F5F9' }}
-                        >
-                          <Bell size={14} color={isSubscribed ? '#16A34A' : '#475569'} />
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: isSubscribed ? '#16A34A' : '#475569' }}>
-                            {isSubscribed ? 'Subscribed' : 'Notify me'}
-                          </Text>
-                        </Pressable>
-                      </View>
+            <Pressable
+              onPress={() => setHazardModalVisible(true)}
+              style={[
+                styles.fabHazard,
+                { bottom: Math.max(insets.bottom + 155, 165) },
+              ]}
+            >
+              <AlertTriangle size={22} color="#FFFFFF" />
+            </Pressable>
+          </View>
 
-                      {/* Staged Delivery Status Timeline */}
-                      <StatusTimeline currentStatus={selectedSubmission.status} events={clusterEvents} />
+          {/* Master-Detail Tablet Side Panel */}
+          {isMasterDetail ? (
+            <View
+              style={[
+                styles.tabletSidePanel,
+                {
+                  backgroundColor: theme.colors.white,
+                  borderLeftColor: theme.colors.neutral[200],
+                  paddingTop: Math.max(insets.top, 16),
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
+              ]}
+            >
+              <View style={styles.tabletPanelHeader}>
+                <Layers size={18} color={theme.colors.primary} />
+                <Text style={[styles.tabletPanelTitle, { color: theme.colors.neutral[900] }]}>
+                  Issue Details
+                </Text>
+                {selectedSubmission && (
+                  <Pressable
+                    onPress={() => setSelectedSubmission(null)}
+                    style={styles.panelCloseBtn}
+                  >
+                    <X size={16} color={theme.colors.neutral[500]} />
+                  </Pressable>
+                )}
+              </View>
 
-                      {/* Peer Flagging Action */}
-                      <Pressable
-                        onPress={() => setFlagModalVisible(true)}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginTop: 12,
-                          paddingVertical: 6,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: '#FEF2F2',
-                          alignSelf: 'flex-start',
-                        }}
-                      >
-                        <Flag size={14} color="#EF4444" />
-                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#EF4444' }}>
-                          Report this submission
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
+              {selectedSubmission ? (
+                renderDetailContent(selectedSubmission)
+              ) : (
+                <View style={styles.tabletEmptyState}>
+                  <MapPin size={40} color={theme.colors.neutral[300]} />
+                  <Text style={[styles.tabletEmptyTitle, { color: theme.colors.neutral[700] }]}>
+                    No Issue Selected
+                  </Text>
+                  <Text style={[styles.tabletEmptyDesc, { color: theme.colors.neutral[500] }]}>
+                    Tap on any map marker or hazard pin to inspect verification status, photos, and live timeline.
+                  </Text>
                 </View>
               )}
-            </BottomSheetView>
-          </BottomSheet>
+            </View>
+          ) : (
+            /* Phone Bottom Sheet */
+            <BottomSheet
+              ref={bottomSheetRef}
+              index={-1}
+              snapPoints={snapPoints}
+              enablePanDownToClose={true}
+              backgroundStyle={{ backgroundColor: theme.colors.white }}
+              handleIndicatorStyle={{ backgroundColor: theme.colors.neutral[300] }}
+            >
+              <BottomSheetView style={styles.bottomSheetContent}>
+                {selectedSubmission && renderDetailContent(selectedSubmission)}
+              </BottomSheetView>
+            </BottomSheet>
+          )}
 
-          {/* Peer Flagging Reason Modal */}
+          {/* Just-in-Time Location Permission Pre-Prompt Modal */}
+          <PermissionPromptModal
+            visible={permissionModalVisible}
+            permissionType="location_foreground"
+            isBlocked={isLocationBlocked}
+            onGrant={handleGrantLocation}
+            onDenyOrFallback={() => {
+              setPermissionModalVisible(false);
+              Toast.show({
+                type: 'info',
+                text1: 'Manual Location Mode',
+                text2: 'You can browse and explore any ward by panning the map.',
+              });
+            }}
+            onClose={() => setPermissionModalVisible(false)}
+          />
+
+          {/* Flagging Modal */}
           <Modal visible={flagModalVisible} transparent animationType="slide">
-            <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'flex-end' }}>
-              <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Flag size={20} color="#EF4444" />
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>Report Submission</Text>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>
+                    Report Submission
+                  </Text>
                 </View>
                 <Text style={{ fontSize: 13, color: '#64748B' }}>
-                  Select the reason for reporting this civic submission. False reports impact credibility.
+                  Select the reason for reporting this submission.
                 </Text>
 
                 {[
                   { id: 'not_real', title: 'Not a real civic issue' },
                   { id: 'inappropriate', title: 'Inappropriate or explicit content' },
                   { id: 'duplicate', title: 'Duplicate submission' },
-                  { id: 'targets_person_property', title: 'Targets a person or private property' },
+                  { id: 'targets_person_property', title: 'Targets private individual or property' },
                 ].map((item) => (
                   <Pressable
                     key={item.id}
@@ -742,15 +743,11 @@ export default function MapScreen() {
                         });
                       }
                     }}
-                    style={{
-                      padding: 14,
-                      borderRadius: 12,
-                      backgroundColor: '#F8FAFC',
-                      borderWidth: 1,
-                      borderColor: '#E2E8F0',
-                    }}
+                    style={styles.flagOption}
                   >
-                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1E293B' }}>{item.title}</Text>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1E293B' }}>
+                      {item.title}
+                    </Text>
                   </Pressable>
                 ))}
 
@@ -783,125 +780,216 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  skeletonContainer: {
-    flex: 1,
-    padding: baseTheme.spacing[16],
-    gap: baseTheme.spacing[16],
-  },
-  skeletonHeader: {
-    marginTop: 20,
-  },
-  skeletonMap: {
+  mainLayout: {
     flex: 1,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: baseTheme.spacing[32],
+  masterDetailContainer: {
+    flexDirection: 'row',
   },
-  errorIcon: {
-    marginBottom: baseTheme.spacing[16],
-  },
-  errorTitle: {
-    fontSize: baseTheme.typography.fontSizes.lg,
-    fontWeight: baseTheme.typography.fontWeights.bold,
-    marginBottom: baseTheme.spacing[8],
-  },
-  errorText: {
-    fontSize: baseTheme.typography.fontSizes.sm,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: baseTheme.spacing[24],
-  },
-  retryButton: {
-    width: '100%',
-    maxWidth: 200,
-  },
-  mapContainer: {
+  mapPane: {
     flex: 1,
   },
   map: {
     ...StyleSheet.absoluteFillObject,
   },
+  tabletSidePanel: {
+    width: 380,
+    borderLeftWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  tabletPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tabletPanelTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    marginLeft: 8,
+  },
+  panelCloseBtn: {
+    padding: 4,
+  },
+  tabletEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 12,
+  },
+  tabletEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  tabletEmptyDesc: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  skeletonContainer: {
+    flex: 1,
+    padding: baseTheme.spacing[16],
+    gap: baseTheme.spacing[16],
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  presenceBadge: {
+    position: 'absolute',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 10,
+  },
+  presenceText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
   filterFloatingContainer: {
     position: 'absolute',
-    top: 16,
-    left: 0,
-    right: 0,
     zIndex: 10,
   },
   filterScroll: {
-    paddingHorizontal: baseTheme.spacing[16],
-    gap: baseTheme.spacing[8],
+    gap: 8,
+    paddingRight: 16,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: baseTheme.spacing[12],
-    paddingVertical: baseTheme.spacing[8],
-    borderRadius: baseTheme.radius.round,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
     borderWidth: 1,
-    ...baseTheme.shadows.low,
+    gap: 6,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   chipIcon: {
-    marginRight: baseTheme.spacing[4],
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   chipText: {
-    fontSize: baseTheme.typography.fontSizes.sm,
-    fontWeight: baseTheme.typography.fontWeights.semibold,
-  },
-  chipTextActive: {
-    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   fabLocation: {
     position: 'absolute',
-    bottom: 24,
     right: 16,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
     borderWidth: 1,
-    ...baseTheme.shadows.medium,
   },
-  bottomSheetBg: {
-    borderTopLeftRadius: baseTheme.radius.xl,
-    borderTopRightRadius: baseTheme.radius.xl,
-    ...baseTheme.shadows.high,
+  fabHazard: {
+    position: 'absolute',
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
   },
-  bottomSheetIndicator: {
-    width: 40,
+  markerWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerPulse: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  markerPin: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  markerTriangle: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  hazardMarker: {
+    backgroundColor: '#DC2626',
+    padding: 6,
+    borderRadius: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: '#991B1B',
   },
   bottomSheetContent: {
     flex: 1,
-    padding: 20,
   },
-  detailContainer: {
+  detailScrollView: {
     flex: 1,
+  },
+  detailScrollContent: {
+    padding: 16,
+    gap: 12,
   },
   detailHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: baseTheme.spacing[16],
   },
   detailTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: baseTheme.spacing[12],
+    gap: 10,
   },
   detailIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: baseTheme.radius.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   detailTitle: {
-    fontSize: baseTheme.typography.fontSizes.lg,
-    fontWeight: baseTheme.typography.fontWeights.bold,
+    fontSize: 16,
+    fontWeight: '700',
   },
   timeRow: {
     flexDirection: 'row',
@@ -910,130 +998,106 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   detailTime: {
-    fontSize: baseTheme.typography.fontSizes.xs,
+    fontSize: 11,
   },
-  detailBody: {
-    flexDirection: 'row',
-    gap: baseTheme.spacing[16],
-  },
-  detailBodyStacked: {
-    flexDirection: 'column',
-    gap: baseTheme.spacing[16],
+  detailPhoto: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
   },
   beforeAfterContainer: {
     flexDirection: 'row',
-    gap: baseTheme.spacing[12],
-    justifyContent: 'space-between',
-    width: '100%',
+    gap: 8,
   },
   photoWrapper: {
     flex: 1,
     position: 'relative',
-    height: 120,
-    borderRadius: baseTheme.radius.md,
-    overflow: 'hidden',
   },
   detailPhotoBefore: {
     width: '100%',
-    height: '100%',
+    height: 140,
+    borderRadius: 8,
   },
   detailPhotoAfter: {
     width: '100%',
-    height: '100%',
+    height: 140,
+    borderRadius: 8,
   },
   photoLabelBadge: {
     position: 'absolute',
-    bottom: 6,
+    top: 6,
     left: 6,
-    backgroundColor: '#DC2626',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   photoLabelText: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: baseTheme.typography.fontWeights.bold,
-  },
-  detailTextWrapperFull: {
-    width: '100%',
-    gap: 4,
-  },
-  detailPhoto: {
-    width: 110,
-    height: 110,
-    borderRadius: baseTheme.radius.md,
-  },
-  violationContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: baseTheme.spacing[8],
-  },
-  violationText: {
-    fontSize: 9,
-    fontWeight: baseTheme.typography.fontWeights.bold,
-    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   detailTextWrapper: {
-    flex: 1,
-    justifyContent: 'space-between',
+    gap: 6,
   },
   notesLabel: {
-    fontSize: 10,
-    fontWeight: baseTheme.typography.fontWeights.bold,
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   detailNotes: {
-    fontSize: baseTheme.typography.fontSizes.sm,
+    fontSize: 13,
     lineHeight: 18,
-    marginTop: 2,
   },
   coordinatesWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 8,
+    marginTop: 4,
   },
   coordinatesText: {
-    fontSize: baseTheme.typography.fontSizes.xs,
+    fontSize: 11,
   },
-
-  // Pulsing Map Marker Styles
-  markerWrapper: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 44,
-    height: 44,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
   },
-  markerPulse: {
-    position: 'absolute',
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    zIndex: 1,
-  },
-  markerPin: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  flagBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 2,
-    ...baseTheme.shadows.low,
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
-  markerTriangle: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    marginTop: -2,
-    zIndex: 2,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    gap: 16,
+  },
+  flagOption: {
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
 });

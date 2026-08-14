@@ -17,6 +17,7 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Network from 'expo-network';
+import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,7 +26,6 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
-import MapView, { Marker } from 'react-native-maps';
 import Toast from 'react-native-toast-message';
 import {
   Cone,
@@ -45,7 +45,11 @@ import {
   CheckSquare,
   Square,
   ShieldAlert,
+  Image as ImageIcon,
 } from 'lucide-react-native';
+import { useResponsive } from '../hooks/useResponsive';
+import { PermissionPromptModal } from '../components/PermissionPromptModal';
+import { checkPermissionStatus, requestNativePermission } from '../services/permissionManager';
 
 import { theme as baseTheme } from '../theme/theme';
 import { useTheme } from '../theme/ThemeContext';
@@ -82,6 +86,7 @@ interface CaptureScreenProps {
 
 export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps = {}) {
   const { theme } = useTheme();
+  const { columns, insets } = useResponsive();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
 
@@ -278,7 +283,6 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
           setGpsAccuracy(loc.coords.accuracy);
         } catch (_) {}
 
-        // Part 4 Requirement: Force category selection IMMEDIATELY after capture!
         setFlowState('category-picker');
       }
     } catch (err) {
@@ -286,6 +290,35 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
         type: 'error',
         text1: 'Capture Failed',
         text2: 'Could not snap picture. Please try again.',
+      });
+    }
+  };
+
+  const pickFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selected = result.assets[0];
+        setPhotoUri(selected.uri);
+
+        try {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          setGpsAccuracy(loc.coords.accuracy);
+        } catch (_) {}
+
+        setFlowState('category-picker');
+      }
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: 'Gallery Selection Failed',
+        text2: 'Could not load image from photo library.',
       });
     }
   };
@@ -468,6 +501,14 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
               </Text>
               <View style={styles.captureRow}>
                 <Pressable
+                  onPress={pickFromGallery}
+                  style={styles.galleryButton}
+                  accessibilityLabel="Choose photo from gallery"
+                >
+                  <ImageIcon size={24} color="#FFFFFF" />
+                </Pressable>
+
+                <Pressable
                   onPress={takePhoto}
                   disabled={gpsAccuracy === null}
                   style={({ pressed }) => [
@@ -478,6 +519,8 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
                 >
                   <View style={[styles.captureInnerCircle, gpsAccuracy === null && styles.disabledCaptureCircle]} />
                 </Pressable>
+
+                <View style={{ width: 44 }} />
               </View>
             </View>
           </CameraView>
@@ -500,7 +543,14 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
                 <Pressable
                   key={item.id}
                   onPress={() => handleSelectCategory(item)}
-                  style={[styles.typeCard, { backgroundColor: theme.colors.white, borderColor: theme.colors.neutral[200] }]}
+                  style={[
+                    styles.typeCard,
+                    {
+                      width: columns >= 3 ? '31%' : '48%',
+                      backgroundColor: theme.colors.white,
+                      borderColor: theme.colors.neutral[200],
+                    },
+                  ]}
                 >
                   <View style={[styles.typeIconContainer, { backgroundColor: item.bgColor }]}>
                     {item.icon}
@@ -753,7 +803,6 @@ const styles = StyleSheet.create({
   typeCard: {
     borderRadius: baseTheme.radius.lg,
     padding: baseTheme.spacing[16],
-    width: (width - 48 - 16) / 2,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -817,8 +866,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   captureRow: {
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 24,
+  },
+  galleryButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   captureOuterRing: {
     width: 72,
