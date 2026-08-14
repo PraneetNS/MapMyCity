@@ -26,10 +26,16 @@ import { getDeviceId } from '../utils/device';
 import {
   Card,
   StatusIndicator,
+  StatusBadge,
   Skeleton,
   EmptyState,
   Button,
 } from '../components';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SubmissionRowSkeleton } from '../components/Skeleton';
+
+const CACHE_KEY_SUBMISSIONS = 'CROWDSENSE_SUBMISSIONS_CACHE';
 
 export default function SubmissionsScreen() {
   const { theme, isDark } = useTheme();
@@ -42,7 +48,14 @@ export default function SubmissionsScreen() {
     if (isRefresh) {
       setRefreshing(true);
     } else {
-      setLoading(true);
+      // Stale-While-Revalidate: Load cached data immediately
+      try {
+        const cached = await AsyncStorage.getItem(CACHE_KEY_SUBMISSIONS);
+        if (cached) {
+          setSubmissions(JSON.parse(cached));
+          setLoading(false); // Hide skeleton immediately if cached data exists!
+        }
+      } catch (_) {}
     }
     setError(null);
 
@@ -50,11 +63,11 @@ export default function SubmissionsScreen() {
       const deviceId = await getDeviceId();
       const rows = await fetchDeviceSubmissions(deviceId);
       
-      // Sort submissions by capture date descending
       const sorted = rows.sort(
         (a, b) => new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
       );
       setSubmissions(sorted);
+      await AsyncStorage.setItem(CACHE_KEY_SUBMISSIONS, JSON.stringify(sorted));
     } catch (err: any) {
       console.error(err);
       setError(err?.message || 'Failed to connect to reports database.');
@@ -186,7 +199,7 @@ export default function SubmissionsScreen() {
                 {item.mission_type.charAt(0).toUpperCase() + item.mission_type.slice(1)}
               </Text>
             </View>
-            <StatusIndicator status={item.status} />
+            <StatusBadge status={item.status} size="small" />
           </View>
 
           <View style={styles.cardContent}>
