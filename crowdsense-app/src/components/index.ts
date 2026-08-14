@@ -5,3 +5,5 @@ export * from './StatusIndicator';
 export * from './EmptyState';
 export * from './LoadingSpinner';
 export * from './Skeleton';
+export * from './StatusBadge';
+export * from './StatusStepper';

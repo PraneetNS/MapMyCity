@@ -6,6 +6,7 @@ import {
   Pressable,
   ViewStyle,
   TextStyle,
+  View,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -21,7 +22,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: 'primary' | 'vibrant' | 'secondary' | 'danger' | 'ghost';
   loading?: boolean;
   disabled?: boolean;
   icon?: React.ReactNode;
@@ -51,7 +52,9 @@ export const Button: React.FC<ButtonProps> = ({
   const handlePressIn = () => {
     if (disabled || loading) return;
     scale.value = withSpring(0.96, { damping: 10, stiffness: 100 });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (_) {}
   };
 
   const handlePressOut = () => {
@@ -61,19 +64,39 @@ export const Button: React.FC<ButtonProps> = ({
 
   const getVariantStyles = () => {
     switch (variant) {
+      case 'vibrant':
+        return {
+          button: {
+            backgroundColor: theme.colors.primaryVibrant,
+          },
+          text: {
+            color: '#FFFFFF',
+          },
+          loaderColor: '#FFFFFF',
+        };
       case 'secondary':
         return {
           button: {
-            backgroundColor: theme.colors.neutral[200],
+            backgroundColor: theme.colors.neutral[100],
             borderWidth: 1,
             borderColor: theme.colors.neutral[300],
-            shadowOpacity: 0,
-            elevation: 0,
           },
           text: {
             color: theme.colors.neutral[800],
           },
-          loaderColor: theme.colors.secondary,
+          loaderColor: theme.colors.neutral[800],
+        };
+      case 'ghost':
+        return {
+          button: {
+            backgroundColor: 'transparent',
+            elevation: 0,
+            shadowOpacity: 0,
+          },
+          text: {
+            color: theme.colors.primaryVibrant,
+          },
+          loaderColor: theme.colors.primaryVibrant,
         };
       case 'danger':
         return {
@@ -81,9 +104,9 @@ export const Button: React.FC<ButtonProps> = ({
             backgroundColor: theme.colors.status.rejected,
           },
           text: {
-            color: theme.colors.white,
+            color: '#FFFFFF',
           },
-          loaderColor: theme.colors.white,
+          loaderColor: '#FFFFFF',
         };
       case 'primary':
       default:
@@ -92,26 +115,14 @@ export const Button: React.FC<ButtonProps> = ({
             backgroundColor: theme.colors.primary,
           },
           text: {
-            color: theme.colors.white,
+            color: '#FFFFFF',
           },
-          loaderColor: theme.colors.white,
+          loaderColor: '#FFFFFF',
         };
     }
   };
 
   const variantStyles = getVariantStyles();
-
-  const dynamicStyles = StyleSheet.create({
-    disabledButton: {
-      backgroundColor: theme.colors.neutral[300],
-      borderColor: theme.colors.neutral[300],
-      shadowOpacity: 0,
-      elevation: 0,
-    },
-    disabledText: {
-      color: theme.colors.neutral[500],
-    },
-  });
 
   return (
     <AnimatedPressable
@@ -125,7 +136,7 @@ export const Button: React.FC<ButtonProps> = ({
       style={[
         styles.button,
         variantStyles.button,
-        disabled && dynamicStyles.disabledButton,
+        disabled && styles.disabledButton,
         animatedStyle,
         style,
       ]}
@@ -133,19 +144,19 @@ export const Button: React.FC<ButtonProps> = ({
       {loading ? (
         <ActivityIndicator size="small" color={variantStyles.loaderColor} />
       ) : (
-        <>
-          {icon && <Animated.View style={styles.iconContainer}>{icon}</Animated.View>}
+        <View style={styles.contentRow}>
+          {icon && <View style={styles.iconContainer}>{icon}</View>}
           <Text
             style={[
               styles.text,
               variantStyles.text,
-              disabled && dynamicStyles.disabledText,
+              disabled && styles.disabledText,
               textStyle,
             ]}
           >
             {title}
           </Text>
-        </>
+        </View>
       )}
     </AnimatedPressable>
   );
@@ -153,13 +164,18 @@ export const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   button: {
-    height: 48,
+    minHeight: baseTheme.minTouchTarget + 4, // 48pt exceeds 44pt WCAG requirement
     borderRadius: baseTheme.radius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: baseTheme.spacing[24],
     ...baseTheme.shadows.low,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   text: {
     fontSize: baseTheme.typography.fontSizes.md,
@@ -169,5 +185,14 @@ const styles = StyleSheet.create({
     marginRight: baseTheme.spacing[8],
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  disabledButton: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  disabledText: {
+    color: '#94A3B8',
   },
 });

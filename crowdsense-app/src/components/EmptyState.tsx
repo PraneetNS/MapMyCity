@@ -1,80 +1,94 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { theme as baseTheme } from '../theme/theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { Inbox, MapPin, AlertCircle, Sparkles } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 
 interface EmptyStateProps {
+  icon?: 'inbox' | 'map' | 'alert' | 'sparkles' | React.ReactNode;
   title: string;
-  description: string;
-  icon?: React.ReactNode;
-  actionTitle?: string;
+  subtitle?: string;
+  description?: string;
+  actionLabel?: string;
   onAction?: () => void;
-  style?: ViewStyle;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({
+export function EmptyState({
+  icon = 'inbox',
   title,
+  subtitle,
   description,
-  icon,
-  actionTitle,
+  actionLabel,
   onAction,
-  style,
-}) => {
+}: EmptyStateProps) {
   const { theme } = useTheme();
 
-  const dynamicStyles = StyleSheet.create({
-    title: {
-      color: theme.colors.neutral[800],
-    },
-    description: {
-      color: theme.colors.neutral[500],
-    },
-  });
+  const renderIcon = () => {
+    if (React.isValidElement(icon)) {
+      return icon;
+    }
+    const size = 36;
+    const color = theme.colors.primaryVibrant;
+    switch (icon) {
+      case 'map':
+        return <MapPin size={size} color={color} />;
+      case 'alert':
+        return <AlertCircle size={size} color={color} />;
+      case 'sparkles':
+        return <Sparkles size={size} color={color} />;
+      default:
+        return <Inbox size={size} color={color} />;
+    }
+  };
 
   return (
-    <View style={[styles.container, style]}>
-      {icon && <View style={styles.iconContainer}>{icon}</View>}
-      <Text style={[styles.title, dynamicStyles.title]}>{title}</Text>
-      <Text style={[styles.description, dynamicStyles.description]}>{description}</Text>
-      {actionTitle && onAction && (
+    <View style={styles.container}>
+      <View style={[styles.iconCircle, { backgroundColor: theme.colors.primaryBg }]}>
+        {renderIcon()}
+      </View>
+      <Text style={[styles.title, { color: theme.colors.neutral[900] }]}>{title}</Text>
+      <Text style={[styles.subtitle, { color: theme.colors.neutral[600] }]}>
+        {subtitle || description}
+      </Text>
+      {Boolean(actionLabel && onAction) && (
         <Button
-          title={actionTitle}
-          onPress={onAction}
-          variant="primary"
-          style={styles.actionButton}
+          title={actionLabel!}
+          onPress={onAction!}
+          style={styles.button}
         />
       )}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
-    padding: baseTheme.spacing[32],
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    padding: 32,
   },
-  iconContainer: {
-    marginBottom: baseTheme.spacing[16],
-    opacity: 0.6,
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   title: {
-    fontSize: baseTheme.typography.fontSizes.lg,
-    fontWeight: baseTheme.typography.fontWeights.bold,
-    marginBottom: baseTheme.spacing[8],
+    fontSize: 18,
+    fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: 8,
   },
-  description: {
-    fontSize: baseTheme.typography.fontSizes.sm,
+  subtitle: {
+    fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: baseTheme.spacing[24],
-    paddingHorizontal: baseTheme.spacing[16],
+    marginBottom: 20,
   },
-  actionButton: {
-    width: '100%',
-    maxWidth: 200,
+  button: {
+    marginTop: 8,
+    minWidth: 160,
   },
 });
