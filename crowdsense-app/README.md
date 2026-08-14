@@ -1,62 +1,109 @@
 # CrowdSense Mobile Client
 
-The mobile app for **MapMyCity (CrowdSense)** is built with **Expo (React Native)** and **TypeScript**. It serves as the frontend client for citizens to report city issues directly or passively log road anomalies.
+The mobile client for **MapMyCity (CrowdSense)** is built using **Expo (SDK 54)**, **React Native (0.81)**, and **TypeScript**. It serves as the mobile interface for citizens to submit active geotagged issue reports or passively monitor road quality via accelerometer sensing during rides.
 
 ---
 
 ## 📱 Key Features
 
-1.  **Active Issue Reporting ([CaptureScreen.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/screens/CaptureScreen.tsx))**:
-    *   Take photos of road and city issues using the camera.
-    *   Record geolocation coordinates automatically via high-accuracy GPS.
-    *   Add text notes and category tags before submitting.
-2.  **Passive Road Sensing ([RideModeScreen.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/screens/RideModeScreen.tsx))**:
-    *   **"Ride Mode"** registers vertical acceleration spikes (jolts) on the device's $Z$-axis using the accelerometer sensor (sampling at 20Hz).
-    *   Filters device handling noise by calculating variance on $X$ and $Y$ axes. Standard deviation $\sigma_{xy} > 0.12G$ indicates device handling and silences alerts.
-    *   Triggers heavy haptic feedback on jolt detection ($>0.45G$ vertical spike) and tags the GPS coordinates.
-    *   Uploads detected road anomalies in bulk batches to `/submissions/passive-batch`.
-3.  **Interactive Local Maps ([MapScreen.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/screens/MapScreen.tsx))**:
-    *   Displays approved submission pins around the user's location.
-4.  **Submission History ([SubmissionsScreen.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/screens/SubmissionsScreen.tsx))**:
-    *   Lists reports submitted by the device and shows moderation statuses.
-5.  **Admin Navigation Tab ([AdminScreen.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/screens/AdminScreen.tsx))**:
-    *   Enables checking reports and clusters directly inside the mobile app when the admin flag is enabled.
-6.  **WCAG Contrast-Compliant Themes**:
-    *   Supports Light, Dark, and System-preference themes managed via a custom context provider ([ThemeContext.tsx](file:///c:/Users/savan/OneDrive/Desktop/MapMyCity/MapMyCity/crowdsense-app/src/theme/ThemeContext.tsx)).
+1. **Active Issue Reporting ([`CaptureScreen.tsx`](file:///d:/MapMyCity/crowdsense-app/src/screens/CaptureScreen.tsx))**:
+   - Capture high-resolution photos of city issues (potholes, garbage, noise, accessibility obstacles, infrastructure damage).
+   - Automatically record high-accuracy GPS coordinates, EXIF metadata, and timestamp tags.
+   - Attach customized notes and issue category metadata prior to upload.
+
+2. **Interactive Issue Map ([`MapScreen.tsx`](file:///d:/MapMyCity/crowdsense-app/src/screens/MapScreen.tsx))**:
+   - Visualizes nearby verified and reported issue clusters using **React Native Maps** and **Map Clustering**.
+   - Filters issue pins by status (`pending`, `approved`, `resolved`) and category.
+
+4. **Submission History ([`SubmissionsScreen.tsx`](file:///d:/MapMyCity/crowdsense-app/src/screens/SubmissionsScreen.tsx))**:
+   - Displays device submission history, moderation feedback, trust scores, and status flags.
+
+5. **In-App Admin Dashboard ([`AdminScreen.tsx`](file:///d:/MapMyCity/crowdsense-app/src/screens/AdminScreen.tsx))**:
+   - Allows administrators to inspect reports and cluster details directly inside the app (enabled via `EXPO_PUBLIC_ENABLE_ADMIN`).
+
+6. **WCAG-Compliant Modern UI Theme ([`ThemeContext.tsx`](file:///d:/MapMyCity/crowdsense-app/src/theme/ThemeContext.tsx))**:
+   - Dynamic Light and Dark mode theme engine with auto-detection of device preferences.
 
 ---
 
-## 🛠️ Setup & Running
+## 🛠️ Environment Configuration
 
-1.  **Configure Environment Variables**:
-    *   Copy the template env file:
-        ```bash
-        cp .env.example .env
-        ```
-    *   Open `.env` and fill in the required variables:
-        *   `EXPO_PUBLIC_SUPABASE_URL`: Your Supabase URL.
-        *   `EXPO_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous API key.
-        *   `EXPO_PUBLIC_API_URL`: The URL of your running backend (e.g. `http://127.0.0.1:8000` or `http://localhost:4000`).
-        *   `EXPO_PUBLIC_ENABLE_ADMIN`: Set to `true` to display the "Admin" tab inside the bottom tab navigator.
+Create a `.env` file in the root of `crowdsense-app` (or copy `.env.example`):
 
-2.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
+```bash
+cp .env.example .env
+```
 
-3.  **Start the Expo Packager**:
-    ```bash
-    npm start
-    ```
-    *   Press `a` to run on an Android emulator or device.
-    *   Press `i` to run on an iOS simulator.
-    *   Scan the QR code in the terminal with the Expo Go app to test on physical devices.
+Set the target server endpoints and API keys:
+
+```env
+# Supabase Configuration
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-string
+
+# FastAPI Backend Endpoint
+EXPO_PUBLIC_API_URL=http://192.168.0.146:8000
+
+# Feature Flags
+EXPO_PUBLIC_ENABLE_ADMIN=true
+```
+
+> **Note**: For physical mobile device testing, replace `http://localhost:8000` with your machine's local Wi-Fi IP address (e.g. `http://192.168.x.x:8000`).
 
 ---
 
-## 📂 Code Layout
-*   **`src/screens/`**: Screens for Capture, Map, Ride Mode, History, and Admin dashboard.
-*   **`src/components/`**: Standard interface components (Buttons, Card views, Badges, Loaders).
-*   **`src/theme/`**: Theme tokens, colors, spacings, and theme context configurations.
-*   **`src/services/`**: Submissions API wrapper handling network fetches.
-*   **`src/utils/`**: Device identifier caches using AsyncStorage and coordinates parsing.
+## 🚀 Running the App & Getting the QR Code
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Start Expo Development Server
+Run the Metro Bundler dev server:
+```bash
+npx expo start
+```
+or using npm:
+```bash
+npm start
+```
+
+### 3. Open on Mobile Devices (Scanning the QR Code)
+- **Android**: Open the **Expo Go** app and tap **Scan QR code**, then point your camera at the QR code displayed in the terminal or dev tools window.
+- **iOS**: Open the native **Camera** app, scan the QR code displayed in the terminal, and tap the **Expo Go** pop-up banner.
+- **Tunnel Mode** (for testing across different networks):
+  ```bash
+  npx expo start --tunnel
+  ```
+
+### 4. Running on Emulators / Simulators
+- **Android Emulator**: Press `a` in the terminal, or run `npm run android`.
+- **iOS Simulator** (macOS only): Press `i` in the terminal, or run `npm run ios`.
+- **Web Browser**: Press `w` in the terminal, or run `npm run web`.
+
+---
+
+## 📂 Project Structure
+
+```
+crowdsense-app/
+├── assets/             # App icons, splash screens, and static images
+├── src/
+│   ├── components/     # Reusable UI elements (Buttons, Cards, Badges, Loaders)
+│   ├── config/         # App constants, API routes, and Supabase client config
+│   ├── screens/        # Primary application screens
+│   │   ├── CaptureScreen.tsx      # Active issue camera & reporting
+│   │   ├── RideModeScreen.tsx     # Passive accelerometer road quality logging
+│   │   ├── MapScreen.tsx          # Geospatial interactive map
+│   │   ├── SubmissionsScreen.tsx  # User report history & status track
+│   │   └── AdminScreen.tsx        # Mobile moderator overview
+│   ├── services/       # API integration & Supabase client handlers
+│   ├── theme/          # Color tokens, typography, and theme context
+│   ├── types.ts        # TypeScript interfaces & data models
+│   └── utils/          # Device ID helper, location parsers, and storage
+├── App.tsx             # Root React Native component & navigator setup
+├── app.json            # Expo project manifest configuration
+├── index.ts            # Entry point for Expo app registration
+└── package.json        # Dependencies & launch scripts
+```

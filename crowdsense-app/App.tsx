@@ -1,183 +1,326 @@
-import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StatusBar } from 'expo-status-bar';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, Pressable, Modal, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SplashScreen from 'expo-splash-screen';
-import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
-import { Camera, Map, ClipboardList, Shield, Sun, Moon, Laptop, Activity } from 'lucide-react-native';
-import { TouchableOpacity } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+import { MapPin, PlusCircle, List, User } from 'lucide-react-native';
 
-import CaptureScreen from './src/screens/CaptureScreen';
+import { ThemeProvider } from './src/theme/ThemeContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { OfflineBanner } from './src/components/OfflineBanner';
+import { HazardAlertTakeoverModal } from './src/components/HazardAlertTakeoverModal';
+
+import SplashScreen from './src/screens/SplashScreen';
+import LanguageSelectScreen from './src/screens/LanguageSelectScreen';
+import AuthScreen from './src/screens/AuthScreen';
+import ConsentScreen from './src/screens/ConsentScreen';
+
 import MapScreen from './src/screens/MapScreen';
 import SubmissionsScreen from './src/screens/SubmissionsScreen';
-import AdminScreen from './src/screens/AdminScreen';
-import RideModeScreen from './src/screens/RideModeScreen';
-import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
+import LegalSettingsScreen from './src/screens/LegalSettingsScreen';
 
-const Tab = createBottomTabNavigator();
+import ReportCategoryPickerScreen from './src/screens/ReportCategoryPickerScreen';
+import CaptureScreen from './src/screens/CaptureScreen';
+import AccessibilityAuditFormScreen from './src/screens/AccessibilityAuditFormScreen';
+import SafetyConcernFormScreen from './src/screens/SafetyConcernFormScreen';
+import UtilityOutageFormScreen from './src/screens/UtilityOutageFormScreen';
+import NotificationCenterScreen from './src/screens/NotificationCenterScreen';
+import ClusterDetailScreen from './src/screens/ClusterDetailScreen';
 
-const ThemeToggle = () => {
-  const { themeMode, toggleTheme, theme } = useTheme();
-  
-  const getIcon = () => {
-    if (themeMode === 'light') return <Sun size={20} color={theme.colors.neutral[800]} accessibilityLabel="Sun icon" />;
-    if (themeMode === 'dark') return <Moon size={20} color={theme.colors.neutral[800]} accessibilityLabel="Moon icon" />;
-    return <Laptop size={20} color={theme.colors.neutral[800]} accessibilityLabel="Laptop icon" />;
-  };
+import { getUserSession, logoutUser } from './src/services/auth';
 
-  return (
-    <TouchableOpacity
-      onPress={toggleTheme}
-      accessibilityRole="button"
-      accessibilityLabel={`Current theme is ${themeMode}. Tap to change.`}
-      accessibilityHint="Toggles between Light, Dark, and System theme preferences"
-      style={{
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-      }}
-    >
-      {getIcon()}
-    </TouchableOpacity>
-  );
-};
+import { t } from './src/config/i18n';
 
-function AppContent() {
-  const { theme, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+import OnboardingWalkthroughScreen from './src/screens/OnboardingWalkthroughScreen';
 
-  const toastConfig = {
-    success: (props: any) => (
-      <BaseToast
-        {...props}
-        style={{
-          borderLeftColor: theme.colors.status.approved,
-          backgroundColor: theme.colors.white,
-          borderRadius: theme.radius.md,
-          height: 60,
-          ...theme.shadows.medium,
-        }}
-        contentContainerStyle={{ paddingHorizontal: theme.spacing[16] }}
-        text1Style={{
-          fontSize: theme.typography.fontSizes.sm,
-          fontWeight: theme.typography.fontWeights.bold,
-          color: theme.colors.neutral[900],
-        }}
-        text2Style={{
-          fontSize: theme.typography.fontSizes.xs,
-          color: theme.colors.neutral[600],
-        }}
-      />
-    ),
-    error: (props: any) => (
-      <ErrorToast
-        {...props}
-        style={{
-          borderLeftColor: theme.colors.status.rejected,
-          backgroundColor: theme.colors.white,
-          borderRadius: theme.radius.md,
-          height: 60,
-          ...theme.shadows.medium,
-        }}
-        contentContainerStyle={{ paddingHorizontal: theme.spacing[16] }}
-        text1Style={{
-          fontSize: theme.typography.fontSizes.sm,
-          fontWeight: theme.typography.fontWeights.bold,
-          color: theme.colors.neutral[900],
-        }}
-        text2Style={{
-          fontSize: theme.typography.fontSizes.xs,
-          color: theme.colors.neutral[600],
-        }}
-      />
-    ),
-  };
-
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <StatusBar style={isDark ? "light" : "dark"} />
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: theme.colors.white,
-              elevation: 2,
-              shadowColor: '#000',
-              shadowOpacity: 0.05,
-              shadowOffset: { width: 0, height: 1 },
-              shadowRadius: 2,
-            },
-            headerTitleStyle: {
-              fontWeight: theme.typography.fontWeights.bold,
-              fontSize: theme.typography.fontSizes.lg,
-              color: theme.colors.neutral[900],
-            },
-            tabBarActiveTintColor: theme.colors.primary,
-            tabBarInactiveTintColor: theme.colors.neutral[500],
-            tabBarStyle: {
-              backgroundColor: theme.colors.white,
-              borderTopColor: theme.colors.neutral[200],
-              // Android edge-to-edge can place the system navigation bar over
-              // the app. Reserve its inset so every tab stays visible and tappable.
-              height: 60 + insets.bottom,
-              paddingBottom: Math.max(insets.bottom, 8),
-              paddingTop: 8,
-            },
-            tabBarLabelStyle: {
-              fontSize: 11,
-              fontWeight: theme.typography.fontWeights.semibold,
-            },
-            headerRight: () => <ThemeToggle />,
-            tabBarIcon: ({ color, size }) => {
-              if (route.name === 'Capture') {
-                return <Camera size={size} color={color} accessibilityLabel="Camera tab icon" />;
-              } else if (route.name === 'Map') {
-                return <Map size={size} color={color} accessibilityLabel="Map tab icon" />;
-              } else if (route.name === 'Ride Mode') {
-                return <Activity size={size} color={color} accessibilityLabel="Ride Mode tab icon" />;
-              } else if (route.name === 'My submissions') {
-                return <ClipboardList size={size} color={color} accessibilityLabel="Submissions list tab icon" />;
-              } else if (route.name === 'Admin') {
-                return <Shield size={size} color={color} accessibilityLabel="Admin Shield tab icon" />;
-              }
-              return null;
-            },
-          })}
-        >
-          <Tab.Screen name="Capture" component={CaptureScreen} />
-          <Tab.Screen name="Map" component={MapScreen} />
-          <Tab.Screen name="Ride Mode" component={RideModeScreen} options={{ tabBarLabel: 'Ride' }} />
-          <Tab.Screen name="My submissions" component={SubmissionsScreen} options={{ tabBarLabel: 'Reports' }} />
-          {process.env.EXPO_PUBLIC_ENABLE_ADMIN === 'true' ? (
-            <Tab.Screen name="Admin" component={AdminScreen} />
-          ) : null}
-        </Tab.Navigator>
-      </NavigationContainer>
-      <Toast config={toastConfig} />
-    </GestureHandlerRootView>
-  );
-}
+type AuthStep = 'splash' | 'walkthrough' | 'language' | 'auth' | 'consent' | 'authenticated';
+type ActiveTab = 'home' | 'my_reports' | 'profile';
+type ModalFlow = null | 'picker' | 'standard' | 'accessibility' | 'safety' | 'utility' | 'legal' | 'notifications' | 'cluster_detail';
 
 export default function App() {
+  const [authStep, setAuthStep] = useState<AuthStep>('splash');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+  const [activeModal, setActiveModal] = useState<ModalFlow>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [hazardAlertVisible, setHazardAlertVisible] = useState(false);
+
+  // Initial Auth Check
   useEffect(() => {
-    // Hide splash screen when the JS bundle and app tree are ready
-    const hideSplash = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500)); // subtle delay to avoid layout jump
-      await SplashScreen.hideAsync().catch(() => {});
-    };
-    hideSplash();
+    getUserSession().then((session) => {
+      if (session) {
+        setAuthStep('authenticated');
+      }
+    });
   }, []);
 
+  const handleSplashFinish = async () => {
+    const session = await getUserSession();
+    if (session) {
+      setAuthStep('authenticated');
+    } else {
+      setAuthStep('walkthrough');
+    }
+  };
+
+  const handleWalkthroughComplete = () => setAuthStep('language');
+  const handleLanguageComplete = () => setAuthStep('auth');
+  const handleAuthSuccess = () => setAuthStep('consent');
+  const handleConsentAccept = () => setAuthStep('authenticated');
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setActiveTab('home');
+    setAuthStep('walkthrough');
+  };
+
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AppContent />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.flexOne}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <ErrorBoundary>
+            <SafeAreaView style={styles.rootContainer}>
+          {/* Root Offline Network Indicator */}
+          <OfflineBanner isOffline={isOffline} />
+
+          {/* Render Unauthenticated Auth Stack or Authenticated Main Shell */}
+          {authStep === 'splash' && <SplashScreen onFinish={handleSplashFinish} />}
+          {authStep === 'walkthrough' && <OnboardingWalkthroughScreen onComplete={handleWalkthroughComplete} />}
+          {authStep === 'language' && <LanguageSelectScreen onSelectLanguage={handleLanguageComplete} />}
+          {authStep === 'auth' && (
+            <View style={styles.flexOne}>
+              <AuthScreen onAuthSuccess={handleAuthSuccess} />
+            </View>
+          )}
+          {authStep === 'consent' && (
+            <View style={styles.flexOne}>
+              <ConsentScreen onAcceptConsent={handleConsentAccept} />
+            </View>
+          )}
+
+          {authStep === 'authenticated' && (
+            <View style={styles.flexOne}>
+              {/* Active Tab Screen */}
+              <View style={styles.mainContent}>
+                {activeTab === 'home' && <MapScreen />}
+                {activeTab === 'my_reports' && <SubmissionsScreen />}
+                {activeTab === 'profile' && (
+                  <ProfileSettingsScreen
+                    onOpenLegalSettings={() => setActiveModal('legal')}
+                    onChangeLanguage={() => setAuthStep('language')}
+                    onOpenNotificationCenter={() => setActiveModal('notifications')}
+                    onLogout={handleLogout}
+                  />
+                )}
+              </View>
+
+              {/* Master 4-Tab Bottom Navigation Bar */}
+              <View style={styles.tabBar}>
+                <Pressable
+                  style={styles.tabItem}
+                  onPress={() => setActiveTab('home')}
+                >
+                  <MapPin size={22} color={activeTab === 'home' ? '#4F46E5' : '#64748B'} />
+                  <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>
+                    {t('mapTab')}
+                  </Text>
+                </Pressable>
+
+                {/* Center Modal Launcher "Report" Tab */}
+                <Pressable
+                  style={styles.reportTabLauncher}
+                  onPress={() => setActiveModal('picker')}
+                >
+                  <View style={styles.reportIconCircle}>
+                    <PlusCircle size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.reportLabel}>{t('reportTab')}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.tabItem}
+                  onPress={() => setActiveTab('my_reports')}
+                >
+                  <List size={22} color={activeTab === 'my_reports' ? '#4F46E5' : '#64748B'} />
+                  <Text style={[styles.tabLabel, activeTab === 'my_reports' && styles.tabLabelActive]}>
+                    {t('myReportsTab')}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.tabItem}
+                  onPress={() => setActiveTab('profile')}
+                >
+                  <User size={22} color={activeTab === 'profile' ? '#4F46E5' : '#64748B'} />
+                  <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>
+                    {t('profileTab')}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* Category-Tailored Modal Stack */}
+          <Modal visible={Boolean(activeModal)} animationType="slide">
+            {activeModal === 'picker' && (
+              <ReportCategoryPickerScreen
+                onSelectCategory={(catId) => {
+                  if (catId === 'standard') setActiveModal('standard');
+                  else if (catId === 'accessibility') setActiveModal('accessibility');
+                  else if (catId === 'safety_concern') setActiveModal('safety');
+                  else if (catId === 'utility_outage') setActiveModal('utility');
+                }}
+                onClose={() => setActiveModal(null)}
+              />
+            )}
+
+            {activeModal === 'standard' && (
+              <CaptureScreen onCaptureSuccess={() => setActiveModal(null)} />
+            )}
+
+            {activeModal === 'accessibility' && (
+              <AccessibilityAuditFormScreen
+                onBack={() => setActiveModal('picker')}
+                onSubmitSuccess={() => setActiveModal(null)}
+              />
+            )}
+
+            {activeModal === 'safety' && (
+              <SafetyConcernFormScreen
+                onBack={() => setActiveModal('picker')}
+                onSubmitSuccess={() => setActiveModal(null)}
+              />
+            )}
+
+            {activeModal === 'utility' && (
+              <UtilityOutageFormScreen
+                onBack={() => setActiveModal('picker')}
+                onSubmitSuccess={() => setActiveModal(null)}
+              />
+            )}
+
+            {activeModal === 'notifications' && (
+              <NotificationCenterScreen
+                onBack={() => setActiveModal(null)}
+                onSelectCluster={(clusterId) => {
+                  setSelectedClusterId(clusterId);
+                  setActiveModal('cluster_detail');
+                }}
+              />
+            )}
+
+            {activeModal === 'cluster_detail' && (
+              <ClusterDetailScreen
+                clusterId={selectedClusterId || ''}
+                onBack={() => setActiveModal('notifications')}
+              />
+            )}
+
+            {activeModal === 'legal' && (
+              <View style={styles.flexOne}>
+                <Pressable
+                  style={styles.modalCloseHeader}
+                  onPress={() => setActiveModal(null)}
+                >
+                  <Text style={styles.modalCloseText}>← Back to Profile Settings</Text>
+                </Pressable>
+                <LegalSettingsScreen />
+              </View>
+            )}
+          </Modal>
+
+          {/* Root Emergency Hazard Takeover Broadcast Overlay */}
+          <HazardAlertTakeoverModal
+            visible={hazardAlertVisible}
+            hazardType="waterlogging"
+            onViewOnMap={() => {
+              setHazardAlertVisible(false);
+              setActiveTab('home');
+            }}
+            onDismiss={() => setHazardAlertVisible(false)}
+          />
+
+          <Toast />
+        </SafeAreaView>
+      </ErrorBoundary>
+    </ThemeProvider>
+  </SafeAreaProvider>
+</GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  flexOne: {
+    flex: 1,
+  },
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  mainContent: {
+    flex: 1,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    height: Platform.OS === 'android' ? 76 : 70,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingBottom: Platform.OS === 'android' ? 14 : 6,
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    flex: 1,
+  },
+  tabLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    color: '#4F46E5',
+    fontWeight: 'bold',
+  },
+  reportTabLauncher: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -26,
+    flex: 1,
+  },
+  reportIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4F46E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  reportLabel: {
+    fontSize: 11,
+    color: '#4F46E5',
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  modalCloseHeader: {
+    padding: 16,
+    paddingTop: 50,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  modalCloseText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+});
