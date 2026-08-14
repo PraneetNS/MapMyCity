@@ -22,5 +22,6 @@ export interface Submission {
     trust_score: number;
   } | null;
   flags?: string[] | null;
+  cluster_id?: string | null;
   resolution_photo_url?: string | null;
 }
