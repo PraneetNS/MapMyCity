@@ -1,6 +1,6 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.146:8000';
 
-export async function apiFetch(endpoint: string, options: RequestInit = {}) {
+export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   
   // Create default headers
@@ -19,5 +19,5 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     throw new Error(errorText || `API request failed with status ${response.status}`);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
