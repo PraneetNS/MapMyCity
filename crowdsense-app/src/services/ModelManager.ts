@@ -4,9 +4,11 @@ import { isLiteModeEnabled } from './liteMode';
 export type ModelId =
   | 'category_verifier_yolo'
   | 'nsfw_detector'
-  | 'dynamic_translator_slm'
   | 'image_embedding_extractor'
-  | 'voice_asr';
+  | 'voice_asr'
+  | 'voice_intent_classifier'
+  | 'voice_entity_extractor'
+  | 'phrase_translator_tiny';
 
 export interface ModelMetadata {
   id: ModelId;
@@ -18,6 +20,7 @@ export interface ModelMetadata {
   description: string;
   triggerEvent: string;
   minRamGb: number;
+  taskType: 'classification' | 'extraction' | 'translation' | 'detection' | 'asr';
 }
 
 export const MODEL_REGISTRY: Record<ModelId, ModelMetadata> = {
@@ -31,6 +34,7 @@ export const MODEL_REGISTRY: Record<ModelId, ModelMetadata> = {
     description: 'Nano-class object detector for road damage, potholes, and garbage accumulation.',
     triggerEvent: 'First report capture confirmation',
     minRamGb: 2.0,
+    taskType: 'detection',
   },
   image_embedding_extractor: {
     id: 'image_embedding_extractor',
@@ -42,6 +46,7 @@ export const MODEL_REGISTRY: Record<ModelId, ModelMetadata> = {
     description: 'Lightweight embedding model for viewport duplicate pre-checks.',
     triggerEvent: 'Pre-upload duplicate check against nearby clusters',
     minRamGb: 2.0,
+    taskType: 'extraction',
   },
   nsfw_detector: {
     id: 'nsfw_detector',
@@ -53,17 +58,7 @@ export const MODEL_REGISTRY: Record<ModelId, ModelMetadata> = {
     description: 'Fast client-side explicit content and harassment filter.',
     triggerEvent: 'Pre-upload photo check',
     minRamGb: 2.0,
-  },
-  dynamic_translator_slm: {
-    id: 'dynamic_translator_slm',
-    name: 'Distilled Indic Note Translator',
-    version: '1.0.0',
-    sizeBytes: 4718592, // ~4.5 MB
-    sizeMB: 4.5,
-    format: 'tflite',
-    description: 'Lightweight translator for dynamic municipal updates and moderator remarks.',
-    triggerEvent: 'User requests translation of non-templated remarks',
-    minRamGb: 3.0,
+    taskType: 'classification',
   },
   voice_asr: {
     id: 'voice_asr',
@@ -75,6 +70,43 @@ export const MODEL_REGISTRY: Record<ModelId, ModelMetadata> = {
     description: 'On-device multi-dialect speech-to-text recognition model.',
     triggerEvent: 'Voice report recording in non-standard dialects',
     minRamGb: 3.0,
+    taskType: 'asr',
+  },
+  voice_intent_classifier: {
+    id: 'voice_intent_classifier',
+    name: 'Distilled Tiny Intent & Category Classifier',
+    version: '1.2.0',
+    sizeBytes: 6081740, // ~5.8 MB
+    sizeMB: 5.8,
+    format: 'tflite',
+    description: 'Ultra-compact distilled transformer / CNN classifier mapping speech utterances to civic categories.',
+    triggerEvent: 'Voice transcription completion',
+    minRamGb: 2.0,
+    taskType: 'classification',
+  },
+  voice_entity_extractor: {
+    id: 'voice_entity_extractor',
+    name: 'Tiny Span & Keyword Extractor',
+    version: '1.1.0',
+    sizeBytes: 4404019, // ~4.2 MB
+    sizeMB: 4.2,
+    format: 'tflite',
+    description: 'Extractive span selector identifying severity, landmarks, and qualifiers from citizen speech.',
+    triggerEvent: 'Post-intent voice transcription analysis',
+    minRamGb: 2.0,
+    taskType: 'extraction',
+  },
+  phrase_translator_tiny: {
+    id: 'phrase_translator_tiny',
+    name: 'Tiny Civic Phrase Translator',
+    version: '1.0.0',
+    sizeBytes: 13107200, // ~12.5 MB
+    sizeMB: 12.5,
+    format: 'tflite',
+    description: 'Domain-bounded sequence-to-sequence model for short municipal status notes (<150 chars).',
+    triggerEvent: 'User requests translation of dynamic moderator remarks',
+    minRamGb: 2.5,
+    taskType: 'translation',
   },
 };
 
@@ -116,7 +148,7 @@ export async function downloadModel(
 
   // Simulate fast chunked download
   for (let p = 10; p <= 100; p += 20) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 60));
     if (onProgress) onProgress(p);
   }
 
