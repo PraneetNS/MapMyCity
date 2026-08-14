@@ -6,12 +6,17 @@
   --border-glass: rgba(255, 255, 255, 0.08);
   --border-glass-hover: rgba(255, 255, 255, 0.18);
   
+  /* Shared CrowdSense Brand Tokens */
+  --brand-primary: #0f172a;
+  --brand-vibrant: #2563eb;
+  --brand-accent: #0284c7;
+
   /* Vibrant Accents */
   --accent-cyan: #06b6d4;
   --accent-violet: #8b5cf6;
   --accent-rose: #f43f5e;
-  --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
+  --accent-emerald: #16a34a;
+  --accent-amber: #d97706;
   
   /* Text colors */
   --text-primary: #f4f4f5;
