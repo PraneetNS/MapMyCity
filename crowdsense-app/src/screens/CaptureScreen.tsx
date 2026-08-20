@@ -46,6 +46,9 @@ import {
   Square,
   ShieldAlert,
   Image as ImageIcon,
+  Sparkles,
+  AlertCircle,
+  Wand2,
 } from 'lucide-react-native';
 import { useResponsive } from '../hooks/useResponsive';
 import { PermissionPromptModal } from '../components/PermissionPromptModal';
@@ -65,8 +68,12 @@ import {
 import { classifyIssueText, MissionTypeId } from '../services/classifier';
 import { runClientNsfwPreCheck, logBlockedUploadAttempt } from '../services/nsfwFilter';
 import { verifyPhotoCategory, recordVerificationOverride, CategoryVerificationResult } from '../services/categoryVerifier';
+import { runReportQualityAssist, QualityAssistResult } from '../services/qualityAssist';
+import { enhanceLowLightPhoto } from '../services/imageEnhancer';
+import { apiFetch } from '../config/apiClient';
 import { getUserSession } from '../services/auth';
 import { t } from '../config/i18n';
+
 
 const { width } = Dimensions.get('window');
 
@@ -117,10 +124,17 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
   const [isVerifyingCategory, setIsVerifyingCategory] = useState(false);
   const [isOverridden, setIsOverridden] = useState(false);
 
+  // Quality Assist & Note Improvement States
+  const [qualityResult, setQualityResult] = useState<QualityAssistResult | null>(null);
+  const [isSuggestingNote, setIsSuggestingNote] = useState(false);
+  const [suggestedNote, setSuggestedNote] = useState<string | null>(null);
+  const [qualityDismissed, setQualityDismissed] = useState(false);
+
   // Submit states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
 
   // Structured Audit & Safety Concern States
   const [safetySubtype, setSafetySubtype] = useState<'poor_lighting' | 'broken_streetlight' | 'isolated_stretch' | 'harassment_hotspot' | 'other'>('poor_lighting');
@@ -326,6 +340,7 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
   const handleSelectCategory = async (item: MissionType) => {
     setSelectedType(item);
     setIsOverridden(false);
+    setQualityDismissed(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setFlowState('confirm');
 
@@ -340,6 +355,50 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
       } finally {
         setIsVerifyingCategory(false);
       }
+
+      // Run on-device Report Quality Assist (blur, darkness, context)
+      try {
+        const qRes = await runReportQualityAssist(photoUri, item.id, notes);
+        setQualityResult(qRes);
+      } catch (_) {
+        setQualityResult(null);
+      }
+    }
+  };
+
+  const handleSuggestNoteImprovement = async () => {
+    if (!selectedType) return;
+    setIsSuggestingNote(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const res = await apiFetch('/ai/suggest-note-improvement', {
+        method: 'POST',
+        body: JSON.stringify({
+          note: notes,
+          category: selectedType.id,
+          user_id: userId || 'anonymous'
+        })
+      });
+      if (res && res.suggested_note) {
+        setSuggestedNote(res.suggested_note);
+        Toast.show({
+          type: 'success',
+          text1: 'Suggestion Ready',
+          text2: 'Review improved civic phrasing below.',
+        });
+      }
+    } catch (_) {
+      // Local deterministic fallback
+      const fallbackPhrases: Record<string, string> = {
+        pothole: `Road damage: ${notes.trim() || 'pothole'} causing hazardous traffic and vehicle risk.`,
+        garbage: `Garbage dump: ${notes.trim() || 'solid waste accumulation'} requiring civic clearance.`,
+        safety_concern: `Public safety hazard: ${notes.trim() || 'poor lighting'} endangering evening commuters.`,
+        infrastructure: `Damaged civic infrastructure: ${notes.trim() || 'broken asset'} requiring municipal repair.`,
+        accessibility: `Accessibility barrier: ${notes.trim() || 'missing ramp/blocked pathway'} obstructing pedestrians.`
+      };
+      setSuggestedNote(fallbackPhrases[selectedType.id] || `Civic issue: ${notes.trim() || 'requiring inspection'}`);
+    } finally {
+      setIsSuggestingNote(false);
     }
   };
 
@@ -389,8 +448,19 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+      // Part 7 Requirement: Automatic on-device photo brightness enhancement for low-light captures
+      let finalPhotoUri = photoUri;
+      if (photoUri && (qualityResult?.isLowLight || new Date().getHours() < 6 || new Date().getHours() >= 19)) {
+        try {
+          const enh = await enhanceLowLightPhoto(photoUri);
+          if (enh.appliedEnhancement) {
+            finalPhotoUri = enh.enhancedUri;
+          }
+        } catch (_) {}
+      }
+
       // Part 4 Requirement: Run client-side NSFW pre-check BEFORE Cloudinary upload!
-      const preCheck = photoUri ? await runClientNsfwPreCheck(photoUri) : { passed: true, flagReason: null };
+      const preCheck = finalPhotoUri ? await runClientNsfwPreCheck(finalPhotoUri) : { passed: true, flagReason: null };
       if (!preCheck.passed) {
         await logBlockedUploadAttempt(userId || 'anonymous', deviceId, preCheck.flagReason || 'Explicit content detected');
         setIsSubmitting(false);
@@ -404,12 +474,13 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
 
       // Write to local SQLite Queue FIRST
       await addDraftReport({
-        photo_uri: photoUri || '',
+        photo_uri: finalPhotoUri || '',
         transcript: notes.trim(),
         category: selectedType.id,
         latitude: location.latitude,
         longitude: location.longitude,
       });
+
 
       await refreshPendingCount();
 
@@ -631,6 +702,34 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
               </View>
             )}
 
+            {/* On-Device Report Quality Assist Soft Notices */}
+            {qualityResult && !qualityResult.passed && !qualityDismissed && (
+              <Card style={{ backgroundColor: '#F0F9FF', borderColor: '#0284C7', borderWidth: 1, padding: 14, gap: 8, marginVertical: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Sparkles size={18} color="#0284C7" />
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#0369A1' }}>
+                      Report Quality Suggestion
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => setQualityDismissed(true)}>
+                    <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>Dismiss</Text>
+                  </Pressable>
+                </View>
+                {qualityResult.issues.map((iss, i) => (
+                  <View key={i} style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F172A' }}>{iss.title}</Text>
+                    <Text style={{ fontSize: 11, color: '#475569', lineHeight: 16 }}>{iss.message}</Text>
+                    {iss.canAutoEnhance && (
+                      <Text style={{ fontSize: 11, color: '#059669', fontWeight: 'bold', marginTop: 2 }}>
+                        ✨ Automatic low-light brightness normalization active.
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </Card>
+            )}
+
             {location && (
               <Card style={styles.locationDetailCard} elevation="medium">
                 <Text style={styles.sectionHeading}>Location Coordinates</Text>
@@ -646,10 +745,24 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
             <Card style={styles.notesCard} elevation="medium">
               <View style={styles.notesHeaderRow}>
                 <Text style={styles.sectionHeading}>Description Notes</Text>
-                <Pressable onPress={handleStartListening} style={styles.inlineMicButton}>
-                  <Mic size={16} color={theme.colors.primary} />
-                  <Text style={styles.inlineMicText}>Speak</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  {/* Part 5: Optional Server-side Note-Improvement Suggestion */}
+                  <Pressable 
+                    onPress={handleSuggestNoteImprovement} 
+                    style={[styles.inlineMicButton, { backgroundColor: '#EEF2FF', borderColor: '#818CF8' }]}
+                    disabled={isSuggestingNote}
+                  >
+                    <Sparkles size={14} color="#4F46E5" />
+                    <Text style={[styles.inlineMicText, { color: '#4F46E5', fontWeight: '700' }]}>
+                      {isSuggestingNote ? 'Thinking...' : 'Improve wording?'}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable onPress={handleStartListening} style={styles.inlineMicButton}>
+                    <Mic size={16} color={theme.colors.primary} />
+                    <Text style={styles.inlineMicText}>Speak</Text>
+                  </Pressable>
+                </View>
               </View>
 
               {autoClassifiedBadge && (
@@ -665,9 +778,46 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
                 multiline
                 numberOfLines={3}
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={(txt) => {
+                  setNotes(txt);
+                  if (suggestedNote) setSuggestedNote(null);
+                }}
               />
+
+              {/* Note Improvement Suggestion Review Card */}
+              {suggestedNote && (
+                <View style={{ backgroundColor: '#F5F3FF', borderColor: '#DDD6FE', borderWidth: 1, borderRadius: 8, padding: 12, marginTop: 10, gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Wand2 size={16} color="#7C3AED" />
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#6D28D9' }}>
+                      Suggested Civic Phrasing
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#4C1D95', lineHeight: 18, fontStyle: 'italic' }}>
+                    &ldquo;{suggestedNote}&rdquo;
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                    <Button
+                      title="Use This Phrasing"
+                      onPress={() => {
+                        setNotes(suggestedNote);
+                        setSuggestedNote(null);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      title="Dismiss"
+                      variant="ghost"
+                      onPress={() => setSuggestedNote(null)}
+                      style={{ flex: 0.6 }}
+                    />
+                  </View>
+
+                </View>
+              )}
             </Card>
+
 
             {/* Part 4 Requirement: Mandatory Attestation Checkbox */}
             <Card style={styles.attestationCard} elevation="medium">
