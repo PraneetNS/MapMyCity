@@ -7,3 +7,5 @@ export * from './LoadingSpinner';
 export * from './Skeleton';
 export * from './StatusBadge';
 export * from './StatusStepper';
+export * from './FAQHelpModal';
+
