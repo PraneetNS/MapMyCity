@@ -17,6 +17,7 @@
   --accent-rose: #f43f5e;
   --accent-emerald: #16a34a;
   --accent-amber: #d97706;
+  --accent-indigo: #6366f1;
   
   /* Text colors */
   --text-primary: #f4f4f5;
@@ -26,6 +27,31 @@
   --font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* AI Triage & Recurrence Custom Helpers */
+.triage-summary-box {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.recurrence-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 11px;
+}
+
 
 * {
   box-sizing: border-box;
