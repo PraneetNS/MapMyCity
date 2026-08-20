@@ -4,9 +4,21 @@ MapMyCity (CrowdSense) is an advanced, crowd-sourced road quality and urban issu
 
 The platform supports both **active reporting** (user-submitted photos with metadata) and **passive sensing** (accelerometer-based road quality logging).
 
+## 🤖 AI-Assisted Features Suite & Municipal Intelligence
+
+The platform features an advanced edge/cloud tiered AI architecture (see [AI_FEATURES.md](file:///d:/MapMyCity/AI_FEATURES.md)):
+- **AI-Assisted Moderator Triage**: Generates grounded, 1-line cluster summaries for fast queue scanning without hallucinations.
+- **Predictive Recurrence & Reopening Risk**: Statistical logistic scoring model estimating repeat failure probability and nudging moderators during resolution.
+- **On-Device Quality Assist**: Zero-cost computer vision heuristics detecting dark/blurry photos and ambiguous categories before submission.
+- **Automatic Low-Light Enhancement**: Local brightness and contrast normalization for night-time captures.
+- **Smart Activity Digests**: Natural-language templated weekly updates for citizen engagement.
+- **Scoped FAQ Help Assistant**: Retrieval-based semantic guide matcher with zero hallucination and support fallback.
+- **Civic Note Improvement**: Server-side phrasing suggestions with sliding-window rate limiting.
+
 ---
 
 ## 🏗️ Architecture & Component Overview
+
 
 The system is structured as a multi-service monorepo:
 
