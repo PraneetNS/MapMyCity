@@ -1,0 +1,87 @@
+# AI-Assisted Features Reference: Architecture, Compute Profiles & Municipal B2G Differentiation
+
+MapMyCity layers specialized artificial intelligence across both edge devices (citizen smartphones) and the municipal administrative cloud. The architecture strictly enforces a **hybrid edge/cloud tiering strategy**: zero-cost on-device tiny models and deterministic heuristics run on every single capture without server overhead, while lightweight server-side AI calls and statistical batch jobs are reserved for high-leverage municipal intelligence.
+
+---
+
+## 1. Feature Architecture & Cost / Frequency Matrix
+
+| Feature | Execution Tier | Engine / Model | Cost / Compute Profile | Frequency | B2G Sales Relevant? |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. AI Moderator Triage Summaries** | Server-side | Structured LLM / Grounded NLP | Minimal (Cached Batch Job) | On cluster change / hourly sweep | 🌟 **Yes (Core B2G)** |
+| **2. Issue Recurrence & Reopening Risk** | Server-side / Edge | Statistical Logistic Regression | Zero server LLM cost | On cluster change & at resolution | 🌟 **Yes (Core B2G)** |
+| **3. Report Quality Assist** | On-Device (Edge) | Fast CV Heuristics (Laplacian / Luminance) | **Zero ($0.00)** | Every photo capture & category pick | No (Citizen UX) |
+| **4. Low-Light Photo Enhancement** | On-Device (Edge) | Image Normalization / Contrast Equalizer | **Zero ($0.00)** | Automatic on dark / evening captures | Yes (Data Quality) |
+| **5. Smart Activity Digest** | Server-side / Client | Deterministic Templated Natural Language | **Zero ($0.00)** | Weekly per active user | No (Engagement) |
+| **6. Scoped FAQ Help Assistant** | On-Device / Client | Retrieval-Based Vector / Keyword Matching | **Zero ($0.00)** | On-demand in Help section | No (Support Deflection) |
+| **7. Note Improvement Suggestion** | Server-side | Civic Domain Prompt / Phrasing Map | Low (Rate limited: max 10/hr/user) | Optional (Citizen taps "Improve") | Yes (Report Clarity) |
+
+---
+
+## 2. Deep Dive: High-Leverage Municipal B2G Features
+
+### Part 1 — AI-Assisted Moderator Triage Summaries
+- **Municipal Problem**: Municipal engineers and ward officers are overwhelmed by hundreds of raw photo submissions, making triage slow and error-prone.
+- **How It Works**:
+  - Automatically synthesizes cluster metadata into an authoritative, dense single sentence:
+    - *Example*: `"Pothole: 12 reports (active for ~3 weeks), mostly night-time, near Indiranagar Metro school zone."`
+  - **Zero Hallucination Guarantee**: Strictly grounded in verified cluster attributes (submission count, timestamps, category, night/day distribution, ward, and flagged anomalies).
+  - **Batch Execution Architecture**: Runs as a background scheduled job with in-memory cluster caching (`_TRIAGE_SUMMARY_CACHE`). Never executes per-page-load, keeping cloud infrastructure costs constant regardless of dashboard traffic.
+  - **Queue List Integration**: Surfaced directly in the main `crowdsense-admin` table view next to the Priority Score, allowing moderators to triage entire queues at a glance without opening tickets individually.
+
+### Part 2 — Predictive "Issue Likely to Recur" Flag
+- **Municipal Problem**: Municipalities waste millions patching the same pothole or clearing the same garbage blackspot 4–5 times a year because underlying structural causes (e.g. monsoon waterlogging or heavy axle loads) are ignored.
+- **How It Works**:
+  - Evaluates the reopening probability ($P \in [0.0, 1.0]$) using a statistical logistic regression scoring model combining:
+    1. Historical reopen count in the same 20m spatial centroid
+    2. Category-specific degradation baseline (e.g., asphalt vs. tactile paving)
+    3. Spatial proximity to monsoon waterlogging corridors or heavy traffic corridors
+    4. Vehicle jolt impact intensity from crowdsourced accelerometer sensors
+  - **Resolution-Time Nudge**: When an administrator marks a cluster resolved, the system evaluates recurrence risk. If high risk ($\ge 65\%$), a prominent warning modal appears:
+    - *"⚠️ Monitor this one — high recurrence risk (78% probability). Key factor: Active monsoon waterlogging corridor & heavy vehicle impact."*
+  - **B2G Value Proposition**: Empowers city commissioners to audit contractor patch quality and mandate permanent engineering fixes rather than temporary superficial repairs.
+
+---
+
+## 3. On-Device Tiny AI & Computer Vision (Edge Tier)
+
+### Part 3 — On-Device Report Quality Assist
+- **Lightweight Edge Heuristics**: Runs immediately upon camera capture in `crowdsense-app/src/services/qualityAssist.ts`.
+- **Checks Performed**:
+  - **Darkness / Low-Light**: Fast luminance analysis detecting underexposed night captures.
+  - **Blur & Distortion**: Aspect ratio and edge variance heuristics detecting rushed captures.
+  - **Context Gaps**: Detects ambiguous broad categories (e.g., `"infrastructure"` or `"accessibility"`) submitted without explanatory notes.
+- **Gentle UX Philosophy**: Always soft-suggests improvements with a clear **"Submit Anyway"** override. Never acts as a blocking gate that prevents urgent citizen reporting.
+
+### Part 7 — On-Device Low-Light Photo Enhancement
+- **Automatic Image Processing**: Implemented in `crowdsense-app/src/services/imageEnhancer.ts`.
+- **Zero-Latency Pass**: Dark captures automatically undergo local contrast balancing and brightness normalization before being added to the local SQLite draft queue.
+- **Benefits**: Ensures clear visibility for municipal field workers and eliminates unusable black photo submissions.
+
+---
+
+## 4. Engagement & Support Deflection AI
+
+### Part 4 — Smart Activity Digest
+- **Instant Natural Language Generation**: Upgrades raw event logs into a human-readable activity line in `backend-fastapi/services/smart_digest.py`.
+- **Example Output**: `"2 reports fixed & resolved • 1 moved to in-progress in Ward 12 - Indiranagar. Top 5% active reporter • 6-week streak 🔥"`.
+- **Cost**: $0.00 server cost using deterministic sentence templating.
+
+### Part 5 — Optional Server-Side Note Improvement
+- **Citizen Experience**: When typing short or fragmented descriptions, citizens can tap **"✨ Improve wording?"**.
+- **Transformation**: Refines fragmented notes into standard municipal terminology (e.g. `"big hole in road"` $\rightarrow$ `"Road damage: deep crater approximately 2ft wide on main road causing severe traffic hazard"`).
+- **Safety & Consent**: Shows an interactive popover where the user reviews and clicks **"Use This Phrasing"**; never auto-replaces text without consent.
+- **Rate-Limiting**: Capped at 10 requests/hour/user to prevent abuse.
+
+### Part 6 — Scoped FAQ Help Assistant
+- **Retrieval-Based Architecture**: Implemented in `crowdsense-app/src/services/faqAssistant.ts`.
+- **Curated Knowledge Base**: Pre-loaded with verified answers regarding clustering algorithms, DPDP Act 2023 compliance, offline syncing, and trust scores.
+- **Zero Hallucination Fallback**: If query similarity is below confidence threshold ($< 0.35$), gracefully falls back to the **Contact Support / Grievance Officer** flow rather than generating ungrounded advice.
+
+---
+
+## 5. Security, Privacy & DPDP Act 2023 Compliance
+
+- **No PII Sent to External AI**: User identifiers, phone hashes, and exact home coordinates are stripped before any server AI or summary task.
+- **Women's Safety Reports**: Anonymized at capture time; excluded from external indexing.
+- **Local-First Processing**: Image quality checks, NSFW filtering, and category validation execute 100% on-device before any network transmission.
