@@ -21,10 +21,12 @@ import {
   LogOut,
   ChevronRight,
   Sparkles,
+  HelpCircle,
 } from 'lucide-react-native';
 import { getOrInitializeLiteMode, setLiteModeEnabled } from '../services/liteMode';
 import { getCacheStorageFootprintMB, clearAppCache } from '../services/cacheManager';
 import { INDIAN_LANGUAGES } from './LanguageSelectScreen';
+import { FAQHelpModal } from '../components/FAQHelpModal';
 
 interface ProfileSettingsScreenProps {
   onOpenLegalSettings: () => void;
@@ -41,6 +43,8 @@ export default function ProfileSettingsScreen({
 }: ProfileSettingsScreenProps) {
   const [isLiteMode, setIsLiteMode] = useState(false);
   const [cacheMB, setCacheMB] = useState(0.0);
+  const [showFAQModal, setShowFAQModal] = useState(false);
+
 
   // Notification Preference States
   const [notifyStatus, setNotifyStatus] = useState(true);
@@ -203,12 +207,29 @@ export default function ProfileSettingsScreen({
         </Pressable>
       </View>
 
+      {/* Help & FAQ Assistant */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Help & Knowledge Base</Text>
+
+        <Pressable style={styles.menuRow} onPress={() => setShowFAQModal(true)}>
+          <HelpCircle size={20} color="#6366F1" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.menuTitle}>Civic FAQ & App Assistant</Text>
+            <Text style={styles.menuSubtitle}>Answers about clusters, status tracking, DPDP privacy, and voice</Text>
+          </View>
+          <ChevronRight size={18} color="#94A3B8" />
+        </Pressable>
+      </View>
+
       {/* Logout Action */}
       <Pressable style={styles.logoutBtn} onPress={onLogout}>
         <LogOut size={18} color="#DC2626" />
         <Text style={styles.logoutText}>Log Out Account</Text>
       </Pressable>
+
+      <FAQHelpModal visible={showFAQModal} onClose={() => setShowFAQModal(false)} />
     </ScrollView>
+
   );
 }
 
