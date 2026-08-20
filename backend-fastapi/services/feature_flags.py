@@ -6,8 +6,13 @@ FEATURE_FLAG_CACHE = {
     "live_hazard_layer": True,
     "status_timeline_v1": True,
     "social_upvotes": True,
-    "presence_channels": True
+    "presence_channels": True,
+    "ai_triage_summaries": True,
+    "recurrence_risk_model": True,
+    "smart_activity_digests": True,
+    "civic_note_improvement": True
 }
+
 
 async def is_feature_enabled(flag_name: str, ward_id: str = None) -> bool:
     """
