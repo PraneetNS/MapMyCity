@@ -16,6 +16,9 @@ import {
   Calendar,
   Inbox,
   FileText,
+  Sparkles,
+  Flame,
+  CheckCircle,
 } from 'lucide-react-native';
 
 import { theme as baseTheme } from '../theme/theme';
@@ -23,6 +26,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { fetchDeviceSubmissions } from '../services/submissions';
 import type { Submission } from '../types';
 import { getDeviceId } from '../utils/device';
+import { apiFetch } from '../config/apiClient';
 import {
   Card,
   StatusIndicator,
@@ -40,6 +44,7 @@ const CACHE_KEY_SUBMISSIONS = 'CROWDSENSE_SUBMISSIONS_CACHE';
 export default function SubmissionsScreen() {
   const { theme, isDark } = useTheme();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [digest, setDigest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +73,12 @@ export default function SubmissionsScreen() {
       );
       setSubmissions(sorted);
       await AsyncStorage.setItem(CACHE_KEY_SUBMISSIONS, JSON.stringify(sorted));
+
+      // Fetch Smart Activity Digest
+      try {
+        const digestRes = await apiFetch(`/digest/weekly?user_id=${deviceId}`);
+        if (digestRes) setDigest(digestRes);
+      } catch (_) {}
     } catch (err: any) {
       console.error(err);
       setError(err?.message || 'Failed to connect to reports database.');
@@ -76,6 +87,7 @@ export default function SubmissionsScreen() {
       setRefreshing(false);
     }
   }, []);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -190,6 +202,33 @@ export default function SubmissionsScreen() {
           tintColor={theme.colors.primary}
           colors={[theme.colors.primary]}
         />
+      }
+      ListHeaderComponent={
+        digest ? (
+          <Card style={{ backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF', borderColor: '#818CF8', borderWidth: 1, padding: 14, marginBottom: 12, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={16} color="#6366F1" />
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: isDark ? '#C7D2FE' : '#4338CA' }}>
+                  Smart Activity Digest
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, color: isDark ? '#A5B4FC' : '#6366F1', fontWeight: '600' }}>
+                {digest.ward_name}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 13, color: isDark ? '#E0E7FF' : '#312E81', lineHeight: 18, fontWeight: '500' }}>
+              {digest.summary_text}
+            </Text>
+            {digest.badge_msg && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Text style={{ fontSize: 11, color: isDark ? '#818CF8' : '#4F46E5', fontWeight: '700' }}>
+                  🏆 {digest.badge_msg}
+                </Text>
+              </View>
+            )}
+          </Card>
+        ) : null
       }
       renderItem={({ item }) => (
         <Card style={styles.card}>
