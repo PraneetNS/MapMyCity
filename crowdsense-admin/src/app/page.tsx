@@ -17,8 +17,13 @@ import {
   TrendingUp,
   Percent,
   Layers,
-  Users
+  Users,
+  Sparkles,
+  Activity,
+  Flame,
+  Info
 } from 'lucide-react';
+
 
 const API_BASE_URL = typeof window !== 'undefined' 
   ? (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'http://127.0.0.1:8000') // Adjust base API URL as needed
@@ -59,9 +64,11 @@ export default function Home() {
   // --- App State ---
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [prioritizedClusters, setPrioritizedClusters] = useState<any[]>([]);
+  const [recurrenceModalData, setRecurrenceModalData] = useState<any | null>(null);
   const [deviceTrustScores, setDeviceTrustScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities'>('prioritized');
   const [flaggedSubmissions, setFlaggedSubmissions] = useState<any[]>([]);
   const [accessibilityAudits, setAccessibilityAudits] = useState<any[]>([]);
   const [utilityStatusList, setUtilityStatusList] = useState<any[]>([]);
@@ -113,7 +120,7 @@ export default function Home() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Submissions (returns all submissions to enable stats computation)
+      // 1. Fetch Submissions
       const subRes = await fetch(`${API_BASE_URL}/submissions`);
       if (!subRes.ok) throw new Error("Failed to load submissions");
       const subData = await subRes.json();
@@ -126,7 +133,16 @@ export default function Home() {
         setClusters(clusterData);
       }
 
-      // 3. Fetch device trust scores for unique devices
+      // 3. Fetch Prioritized Clusters with AI Triage Summaries & Recurrence Risk
+      try {
+        const priorRes = await fetch(`${API_BASE_URL}/admin/clusters/prioritized`);
+        if (priorRes.ok) {
+          const priorData = await priorRes.json();
+          setPrioritizedClusters(priorData);
+        }
+      } catch (_) {}
+
+      // 4. Fetch device trust scores for unique devices
       const uniqueDeviceIds = Array.from(new Set(subData.map((s: Submission) => s.device_id))) as string[];
       const scores: Record<string, number> = {};
       await Promise.all(uniqueDeviceIds.map(async (id) => {
@@ -150,6 +166,40 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const handleResolveCluster = async (cluster: any) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/clusters/${cluster.id}/recurrence-risk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ past_reopen_count: cluster.reopen_count || 0 })
+      });
+      const riskData = res.ok ? await res.json() : null;
+      if (riskData && riskData.is_high_risk) {
+        setRecurrenceModalData({ cluster, riskData });
+        return;
+      }
+    } catch (_) {}
+
+    await executeClusterResolution(cluster.id);
+  };
+
+  const executeClusterResolution = async (clusterId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/clusters/${clusterId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved', changed_by_role: 'admin' })
+      });
+      if (res.ok) {
+        fetchData();
+        setRecurrenceModalData(null);
+      }
+    } catch (err: any) {
+      alert(`Resolution failed: ${err.message}`);
+    }
+  };
+
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -429,6 +479,14 @@ export default function Home() {
         {/* Navigation Tabs bar */}
         <div className="tabs-row">
           <button 
+            className={`tab-btn ${activeTab === 'prioritized' ? 'active' : ''}`}
+            onClick={() => setActiveTab('prioritized')}
+            style={{ background: activeTab === 'prioritized' ? 'rgba(99, 102, 241, 0.25)' : undefined, borderColor: activeTab === 'prioritized' ? '#6366f1' : undefined }}
+          >
+            <Sparkles size={15} color="#818cf8" />
+            AI Priority & Triage Queue ({prioritizedClusters.length})
+          </button>
+          <button 
             className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
           >
@@ -442,6 +500,7 @@ export default function Home() {
             <Table size={15} />
             Pending Verification ({stats.pending})
           </button>
+
           <button 
             className={`tab-btn ${activeTab === 'map' ? 'active' : ''}`}
             onClick={() => setActiveTab('map')}
@@ -499,6 +558,202 @@ export default function Home() {
           </div>
         ) : (
           <>
+            {/* VIEW 0: AI PRIORITY & TRIAGE QUEUE */}
+            {activeTab === 'prioritized' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))', borderRadius: '16px', padding: '24px', border: '1px solid rgba(99, 102, 241, 0.3)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(99, 102, 241, 0.15)', padding: '4px 12px', borderRadius: '20px', color: '#818cf8', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
+                        <Sparkles size={14} /> Municipal Intelligence Engine
+                      </div>
+                      <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#f8fafc', margin: '0 0 6px 0' }}>
+                        AI-Assisted Moderator Triage & Priority Queue
+                      </h2>
+                      <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0, maxWidth: '650px', lineHeight: 1.5 }}>
+                        Automated multi-factor priority ranking paired with grounded 1-line triage summaries and statistical recurrence risk predictions to accelerate municipal intervention.
+                      </p>
+                    </div>
+
+                    <button 
+                      className="refresh-btn" 
+                      onClick={fetchData}
+                      style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                    >
+                      <RefreshCw size={14} /> Sync Triage Queue
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '20px' }}>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px 18px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Total Ranked Clusters</span>
+                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', marginTop: '4px' }}>{prioritizedClusters.length}</div>
+                    </div>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px 18px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>High Recurrence Risk</span>
+                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#f43f5e', marginTop: '4px' }}>
+                        {prioritizedClusters.filter(c => c.recurrence_risk?.is_high_risk).length}
+                      </div>
+                    </div>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px 18px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Avg Priority Score</span>
+                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#38bdf8', marginTop: '4px' }}>
+                        {prioritizedClusters.length > 0 
+                          ? (prioritizedClusters.reduce((acc, c) => acc + (c.priority_score || 0), 0) / prioritizedClusters.length).toFixed(2)
+                          : '0.00'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {prioritizedClusters.length === 0 ? (
+                  <div className="table-card" style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
+                    <CheckCircle size={48} style={{ color: 'var(--accent-emerald)', margin: '0 auto 16px' }} />
+                    <h3 style={{ color: '#fff', fontSize: '18px', marginBottom: '8px' }}>Priority Queue Clear</h3>
+                    <p>All active clusters are currently resolved or queued for processing.</p>
+                  </div>
+                ) : (
+                  <div className="table-card">
+                    <div className="submissions-table-container">
+                      <table className="submissions-table">
+                        <thead>
+                          <tr>
+                            <th>Rank & Score</th>
+                            <th>Category</th>
+                            <th style={{ minWidth: '280px' }}>AI Triage Summary</th>
+                            <th>Recurrence Risk</th>
+                            <th>Reports Volume</th>
+                            <th>Location</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prioritizedClusters.map((cluster, index) => {
+                            const score = cluster.priority_score || 0.5;
+                            const risk = cluster.recurrence_risk || {};
+                            const isHighRisk = risk.is_high_risk;
+                            const isMedRisk = risk.risk_level === 'medium';
+
+                            return (
+                              <tr key={cluster.id || index}>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ 
+                                      background: index === 0 ? '#ef4444' : index <= 2 ? '#f59e0b' : '#3b82f6', 
+                                      color: '#fff', 
+                                      padding: '3px 8px', 
+                                      borderRadius: '6px', 
+                                      fontWeight: 800, 
+                                      fontSize: '11px' 
+                                    }}>
+                                      #{index + 1}
+                                    </span>
+                                    <div>
+                                      <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '13px' }}>{score.toFixed(2)}</div>
+                                      <div style={{ width: '45px', height: '4px', background: '#334155', borderRadius: '2px', overflow: 'hidden', marginTop: '3px' }}>
+                                        <div style={{ width: `${Math.min(100, score * 100)}%`, height: '100%', background: score >= 0.8 ? '#ef4444' : score >= 0.5 ? '#f59e0b' : '#10b981' }} />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="mission-pill" style={{ textTransform: 'capitalize' }}>
+                                    {cluster.mission_type || 'pothole'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div style={{ 
+                                    background: 'rgba(15, 23, 42, 0.7)', 
+                                    padding: '10px 14px', 
+                                    borderRadius: '10px', 
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    color: '#e2e8f0',
+                                    fontSize: '12px',
+                                    lineHeight: 1.45,
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '8px'
+                                  }}>
+                                    <Sparkles size={14} color="#818cf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <span>{cluster.triage_summary || `${cluster.submission_count || 1} report(s) active in Indiranagar.`}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span style={{
+                                      background: isHighRisk ? 'rgba(239, 68, 68, 0.15)' : isMedRisk ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                      color: isHighRisk ? '#f87171' : isMedRisk ? '#fbbf24' : '#34d399',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      fontWeight: 800,
+                                      fontSize: '11px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      width: 'fit-content'
+                                    }}>
+                                      {isHighRisk && <AlertTriangle size={11} />}
+                                      {risk.recurrence_probability_pct ? `${risk.recurrence_probability_pct}% Risk` : 'Low Risk'}
+                                    </span>
+                                    {isHighRisk && (
+                                      <span style={{ fontSize: '10px', color: '#f87171', fontWeight: 600 }}>
+                                        ⚠️ Monitor closely
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                                    {cluster.submission_count || 1} reports
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    {cluster.days_open ? `Open ~${Math.round(cluster.days_open)}d` : 'Active'}
+                                  </div>
+                                </td>
+                                <td>
+                                  <a 
+                                    className="loc-link" 
+                                    href={`https://www.google.com/maps/search/?api=1&query=${cluster.latitude || 12.9716},${cluster.longitude || 77.5946}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                  >
+                                    <MapPin size={13} />
+                                    {(cluster.latitude || 12.9716).toFixed(4)}, {(cluster.longitude || 77.5946).toFixed(4)}
+                                  </a>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                      onClick={() => handleResolveCluster(cluster)}
+                                      style={{
+                                        background: isHighRisk ? '#dc2626' : '#10b981',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '7px 14px',
+                                        borderRadius: '8px',
+                                        fontWeight: 700,
+                                        fontSize: '12px',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}
+                                    >
+                                      <Check size={14} /> Resolve
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* VIEW A: DASHBOARD STATS */}
             {activeTab === 'dashboard' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -1080,6 +1335,82 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Recurrence Risk Warning Nudge Modal */}
+      {recurrenceModalData && (
+        <div className="modal-overlay" style={{ background: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(8px)' }}>
+          <div 
+            className="modal-content-container" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '520px', background: '#0f172a', border: '1px solid #dc2626', borderRadius: '16px', padding: '28px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '12px', color: '#ef4444' }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
+                  Monitor This One — High Recurrence Risk
+                </h3>
+                <span style={{ fontSize: '12px', color: '#f87171', fontWeight: 700 }}>
+                  Estimated {recurrenceModalData.riskData.recurrence_probability_pct}% probability of reopening
+                </span>
+              </div>
+            </div>
+
+            <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.5, marginBottom: '18px' }}>
+              Our predictive civic stability model flagged this cluster as prone to repeat failures based on environmental and structural indicators.
+            </p>
+
+            {recurrenceModalData.riskData.risk_factors?.length > 0 && (
+              <div style={{ background: '#1e293b', borderRadius: '10px', padding: '14px', marginBottom: '20px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.5px' }}>
+                  Key Risk Factors Detected:
+                </span>
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', color: '#fca5a5', fontSize: '12px', lineHeight: 1.6 }}>
+                  {recurrenceModalData.riskData.risk_factors.map((f: string, idx: number) => (
+                    <li key={idx}><b>{f}</b></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setRecurrenceModalData(null)}
+                style={{
+                  background: '#334155',
+                  color: '#e2e8f0',
+                  border: 'none',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Keep Open & Monitor
+              </button>
+              <button
+                onClick={() => executeClusterResolution(recurrenceModalData.cluster.id)}
+                style={{
+                  background: '#dc2626',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Mark Resolved Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
