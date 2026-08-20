@@ -27,3 +27,47 @@ export function getPredictiveResolutionEstimate(category: string): ResolutionPre
     confidence: 0.88,
   };
 }
+
+export interface ClientRecurrencePrediction {
+  recurrenceProbabilityPct: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  isHighRisk: boolean;
+  recommendation: string;
+}
+
+const CATEGORY_RECURRENCE_MAP: Record<string, number> = {
+  pothole: 42,
+  garbage: 68,
+  safety_concern: 35,
+  infrastructure: 25,
+  utility_outage: 45,
+  accessibility: 20,
+  noise: 55,
+};
+
+/**
+ * Returns on-device baseline recurrence likelihood estimate for a category.
+ */
+export function getPredictiveRecurrenceEstimate(
+  category: string,
+  submissionCount: number = 1
+): ClientRecurrencePrediction {
+  const cat = (category || 'pothole').toLowerCase();
+  let basePct = CATEGORY_RECURRENCE_MAP[cat] || 30;
+  if (submissionCount >= 5) {
+    basePct = Math.min(95, basePct + 15);
+  }
+
+  const isHighRisk = basePct >= 65;
+  const riskLevel = isHighRisk ? 'high' : basePct >= 38 ? 'medium' : 'low';
+
+  return {
+    recurrenceProbabilityPct: basePct,
+    riskLevel,
+    isHighRisk,
+    recommendation: isHighRisk
+      ? 'High recurrence risk — monitor after resolution'
+      : 'Standard lifecycle expected',
+  };
+}
+
