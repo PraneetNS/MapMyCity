@@ -25,6 +25,11 @@ from database import get_db
 import config.cloudinary as cloudinary_config
 import cloudinary.utils
 from moderation import check_image_content
+from services.triage_summary import generate_grounded_triage_summary, batch_refresh_cluster_summaries
+from services.recurrence_predictor import predict_recurrence_risk
+from services.smart_digest import generate_smart_user_digest
+from services.note_improver import suggest_improved_civic_note
+
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client: Optional[aioredis.Redis] = None
@@ -777,7 +782,17 @@ class AccessibilityAuditSubmit(BaseModel):
     severity: str
     audit_notes: Optional[str] = None
 
+class NoteImprovementRequest(BaseModel):
+    note: str = Field("", description="Raw citizen note")
+    category: str = Field("pothole", description="Mission category")
+    user_id: Optional[str] = Field("anonymous", description="User identifier for rate limiting")
+
+class RecurrenceCheckRequest(BaseModel):
+    past_reopen_count: Optional[int] = Field(0, description="Past reopen count for this cluster")
+    is_monsoon_season: Optional[bool] = Field(False, description="Monsoon weather flag")
+
 from fastapi.responses import JSONResponse
+
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -1903,16 +1918,24 @@ async def upvote_cluster(cluster_id: str, data: ClusterUpvoteSubmit, db: AsyncSe
         return {"status": "success", "message": "Upvote recorded"}
 
 @app.get("/digest/weekly", tags=["Digest"])
-async def get_weekly_digest():
+async def get_weekly_digest(
+    user_id: Optional[str] = Query("anonymous"),
+    ward: Optional[str] = Query("Ward 12 - Indiranagar")
+):
     """
-    Weekly reporter digest summarizing resolved issues and reporter rank in ward.
+    Weekly reporter digest generating one concise, readable activity sentence per user.
     """
-    return {
-        "resolved_issues_count": 4,
-        "ward_name": "Ward 12 - Indiranagar",
-        "reporter_percentile": "Top 5%",
-        "message": "4 issues you reported were resolved this month!"
-    }
+    return generate_smart_user_digest(
+        user_id=user_id or "anonymous",
+        ward_name=ward or "Ward 12 - Indiranagar",
+        resolved_count=2,
+        in_progress_count=1,
+        acknowledged_count=1,
+        upvotes_received=12,
+        active_streak_weeks=6,
+        reporter_rank_pct="Top 5%"
+    )
+
 
 # Utility Outage Endpoints
 MOCK_UTILITIES = []
@@ -2390,6 +2413,7 @@ async def get_prioritized_clusters(
     """
     Calculates dynamic composite priority score for clusters:
     score = (w_size * normalized_size) + (w_severity * severity) + (w_trust * trust) + (w_age * normalized_age)
+    Enriches with AI Moderator Triage Summaries and Predictive Recurrence Risk.
     """
     severity_weights = {
         "safety_concern": 1.0,
@@ -2410,14 +2434,36 @@ async def get_prioritized_clusters(
             score = (w_size * min(size / 10.0, 1.0)) + (w_severity * sev) + (w_trust * 0.8) + (w_age * 0.5)
             c_copy = dict(c)
             c_copy["priority_score"] = round(score, 3)
+            
+            # Grounded triage summary
+            c_copy["triage_summary"] = generate_grounded_triage_summary(
+                cluster_id=str(c.get("id", f"mock-{i}")),
+                mission_type=cat,
+                submission_count=size,
+                first_reported_at=str(c.get("first_reported_at", "")),
+                last_reported_at=str(c.get("last_reported_at", "")),
+                ward=c.get("ward", "Ward 12 - Indiranagar")
+            )
+            
+            # Recurrence prediction
+            c_copy["recurrence_risk"] = predict_recurrence_risk(
+                mission_type=cat,
+                submission_count=size,
+                past_reopen_count=c.get("reopen_count", 0),
+                avg_jolt_intensity=c.get("avg_jolt_intensity")
+            )
+            
             mock_list.append(c_copy)
         mock_list.sort(key=lambda x: x["priority_score"], reverse=True)
         return mock_list
 
     try:
         res = await db.execute(text("""
-            SELECT id, centroid_lat, centroid_lon, mission_type, submission_count, status,
-                   EXTRACT(EPOCH FROM (now() - updated_at))/86400 as days_open
+            SELECT id, centroid, mission_type, submission_count, status,
+                   first_reported_at, last_reported_at,
+                   ST_Y(centroid::geometry) as latitude,
+                   ST_X(centroid::geometry) as longitude,
+                   EXTRACT(EPOCH FROM (now() - last_reported_at))/86400 as days_open
             FROM clusters
             WHERE status != 'resolved'
             ORDER BY submission_count DESC
@@ -2434,10 +2480,93 @@ async def get_prioritized_clusters(
 
             score = (w_size * min(size / 10.0, 1.0)) + (w_severity * sev) + (w_trust * 0.8) + (w_age * min(days / 14.0, 1.0))
             row_dict["priority_score"] = round(score, 3)
+            
+            # Grounded triage summary
+            row_dict["triage_summary"] = generate_grounded_triage_summary(
+                cluster_id=str(row_dict.get("id")),
+                mission_type=cat,
+                submission_count=size,
+                first_reported_at=str(row_dict.get("first_reported_at", "")),
+                last_reported_at=str(row_dict.get("last_reported_at", "")),
+                ward="Ward 12 - Indiranagar"
+            )
+
+            # Recurrence risk estimation
+            row_dict["recurrence_risk"] = predict_recurrence_risk(
+                mission_type=cat,
+                submission_count=size,
+                past_reopen_count=0
+            )
+
             ranked.append(serialize_row(row_dict))
 
         ranked.sort(key=lambda x: x["priority_score"], reverse=True)
         return ranked
     except Exception as e:
+        print(f"FastAPI Backend: Error in get_prioritized_clusters: {e}")
         return []
+
+
+@app.post("/clusters/{cluster_id}/recurrence-risk", tags=["Clusters & Analytics"])
+async def evaluate_cluster_recurrence_risk(
+    cluster_id: str,
+    data: Optional[RecurrenceCheckRequest] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Evaluates probability of cluster reopening/recurrence after being marked resolved.
+    Surfaces as 'Monitor this one — high recurrence risk' nudge in crowdsense-admin.
+    """
+    past_reopen = data.past_reopen_count if data else 0
+    is_monsoon = data.is_monsoon_season if data else False
+    
+    # Try finding cluster category & submission count
+    cat = "pothole"
+    sub_count = 1
+    
+    if USE_MOCK:
+        for c in MOCK_CLUSTERS:
+            if str(c.get("id")) == str(cluster_id):
+                cat = c.get("mission_type", "pothole")
+                sub_count = c.get("submission_count", 1)
+                break
+    else:
+        try:
+            res = await db.execute(
+                text("SELECT mission_type, submission_count FROM clusters WHERE id = :cid"),
+                {"cid": cluster_id}
+            )
+            row = res.fetchone()
+            if row:
+                cat = row.mission_type
+                sub_count = row.submission_count or 1
+        except Exception:
+            pass
+
+    prediction = predict_recurrence_risk(
+        mission_type=cat,
+        submission_count=sub_count,
+        past_reopen_count=past_reopen,
+        is_monsoon_season=is_monsoon
+    )
+    
+    return {
+        "cluster_id": cluster_id,
+        **prediction
+    }
+
+
+@app.post("/ai/suggest-note-improvement", tags=["AI Assistance"])
+async def suggest_note_improvement_endpoint(data: NoteImprovementRequest):
+    """
+    Optional server-side note improvement suggestion for short notes or ambiguous categories.
+    Rate-limited per user. Citizen explicitly reviews and accepts/edits before submit.
+    """
+    result = suggest_improved_civic_note(
+        note=data.note,
+        category=data.category,
+        user_id=data.user_id or "anonymous"
+    )
+    return result
+
 
