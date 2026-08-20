@@ -14,9 +14,7 @@ This document defines the on-device machine learning strategy for **MapMyCity (C
 
 ---
 
-## 2. On-Device Model Registry Matrix
-
-| Model Identifier | Task / Stage | Format & Architecture | Footprint | Trigger Point | Fallback Mechanism |
+| Model / Engine Identifier | Task / Stage | Format & Architecture | Footprint | Trigger Point | Fallback Mechanism |
 |---|---|---|---|---|---|
 | `voice_asr` | Speech-to-text transcription | TFLite / Whisper.cpp tiny | **8.0 MB** | Voice capture recording | Native OS Speech API or typing |
 | `voice_intent_classifier` | Intent & Category classification | Distilled Transformer / CNN | **5.8 MB** | ASR transcript completion | Multilingual keyword rule matcher |
@@ -25,6 +23,10 @@ This document defines the on-device machine learning strategy for **MapMyCity (C
 | `category_verifier_yolo` | Visual hazard object verification | YOLOv8n INT8 | **3.2 MB** | Camera capture confirmation | Direct upload to human triage |
 | `nsfw_detector` | Client-side explicit content filter | MobileNet INT8 | **1.8 MB** | Pre-upload image check | Server-side moderation pipeline |
 | `image_embedding_extractor`| Spatial duplicate embedding extractor | MobileNet INT8 | **2.5 MB** | Pre-upload cluster check | GPS distance thresholding |
+| `quality_assist_cv` | Blur & Darkness edge heuristic | Zero-weight CV Heuristics | **0.0 MB** | Capture confirmation | Manual citizen override |
+| `photo_enhancer_auto` | Low-light contrast normalization | Fast Image Normalization | **0.0 MB** | Dim / night-time captures | Original image passthrough |
+| `faq_retrieval_assistant` | Scoped FAQ knowledge matcher | TF-IDF / Token Similarity | **0.0 MB** | Citizen help & guide queries | Direct Grievance Officer email |
+
 
 ---
 
