@@ -16,6 +16,7 @@ export interface DraftReport {
   status: DraftStatus;
   retry_count: number;
   last_error?: string | null;
+  asset_id?: string | null;
 }
 
 export interface DraftReportInput {
@@ -26,6 +27,7 @@ export interface DraftReportInput {
   latitude: number;
   longitude: number;
   captured_at?: string;
+  asset_id?: string | null;
 }
 
 const SECURE_KEY_ALIAS = 'CROWDSENSE_DRAFT_KEY';
@@ -119,7 +121,8 @@ export async function initQueueDatabase(): Promise<SQLite.SQLiteDatabase> {
         captured_at TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'queued',
         retry_count INTEGER NOT NULL DEFAULT 0,
-        last_error TEXT
+        last_error TEXT,
+        asset_id TEXT
       );
     `);
     
@@ -143,8 +146,8 @@ export async function addDraftReport(input: DraftReportInput): Promise<DraftRepo
 
   await db.runAsync(
     `INSERT OR REPLACE INTO draft_submissions 
-      (id, photo_uri, transcript, category, latitude, longitude, captured_at, status, retry_count, last_error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL);`,
+      (id, photo_uri, transcript, category, latitude, longitude, captured_at, status, retry_count, last_error, asset_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, ?);`,
     [
       id,
       input.photo_uri,
@@ -153,6 +156,7 @@ export async function addDraftReport(input: DraftReportInput): Promise<DraftRepo
       input.latitude,
       input.longitude,
       capturedAt,
+      input.asset_id || null,
     ]
   );
 
@@ -167,6 +171,7 @@ export async function addDraftReport(input: DraftReportInput): Promise<DraftRepo
     status: 'queued',
     retry_count: 0,
     last_error: null,
+    asset_id: input.asset_id || null,
   };
 }
 
@@ -192,6 +197,7 @@ export async function getPendingDrafts(): Promise<DraftReport[]> {
     status: row.status as DraftStatus,
     retry_count: row.retry_count,
     last_error: row.last_error,
+    asset_id: row.asset_id || null,
   }));
 }
 
@@ -273,6 +279,7 @@ export async function syncDraftQueue(
         capturedAt: draft.captured_at,
         missionType: draft.category,
         notes: draft.transcript || undefined,
+        assetId: draft.asset_id || undefined,
       });
 
       await updateDraftStatus(draft.id, 'synced');
