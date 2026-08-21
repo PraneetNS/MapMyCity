@@ -90,6 +90,7 @@ export async function submitPothole({
   capturedAt,
   missionType,
   notes,
+  assetId,
   onProgress,
 }: {
   deviceId: string;
@@ -99,6 +100,7 @@ export async function submitPothole({
   capturedAt: string;
   missionType: string;
   notes?: string;
+  assetId?: string;
   onProgress?: (progress: number) => void;
 }) {
   // A. Upload photo to Cloudinary first
@@ -116,6 +118,7 @@ export async function submitPothole({
         captured_at: capturedAt,
         mission_type: missionType,
         notes: notes || null,
+        asset_id: assetId || null,
       }),
     });
   } catch (error: any) {
