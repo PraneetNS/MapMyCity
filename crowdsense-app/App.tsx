@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, Modal, Platform } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Modal, Platform, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -27,8 +27,17 @@ import SafetyConcernFormScreen from './src/screens/SafetyConcernFormScreen';
 import UtilityOutageFormScreen from './src/screens/UtilityOutageFormScreen';
 import NotificationCenterScreen from './src/screens/NotificationCenterScreen';
 import ClusterDetailScreen from './src/screens/ClusterDetailScreen';
+import { SocialImpactShareModal } from './src/components/SocialImpactShareModal';
 
 import { getUserSession, logoutUser } from './src/services/auth';
+import { initializeQuickActions } from './src/services/quickActions';
+import { incrementAppSessionCount } from './src/services/storeReview';
+import {
+  shouldSuggestDataSaver,
+  markDataSaverSuggestionSeen,
+  setDataSaverEnabled,
+} from './src/services/dataSaver';
+import { ImpactCardData } from './src/services/impactCardGenerator';
 
 import { t } from './src/config/i18n';
 
@@ -46,11 +55,69 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [hazardAlertVisible, setHazardAlertVisible] = useState(false);
 
-  // Initial Auth Check
+  // Asset Tagging Pre-fill State (Part 7)
+  const [taggedAsset, setTaggedAsset] = useState<{
+    assetId: string;
+    category?: any;
+    latitude?: number;
+    longitude?: number;
+  } | null>(null);
+
+  // Share Impact Card State (Part 3)
+  const [shareData, setShareData] = useState<ImpactCardData | null>(null);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+
+  // Initial App Startup Hooks
   useEffect(() => {
+    // 1. Check user session
     getUserSession().then((session) => {
       if (session) {
         setAuthStep('authenticated');
+      }
+    });
+
+    // 2. Track app session count for contextual store review
+    incrementAppSessionCount();
+
+    // 3. Register icon long-press quick actions (Part 2)
+    initializeQuickActions((action) => {
+      if (action === 'report_issue') {
+        setActiveModal('standard');
+      } else if (action === 'open_map') {
+        setActiveTab('home');
+        setActiveModal(null);
+      } else if (action === 'my_reports') {
+        setActiveTab('my_reports');
+        setActiveModal(null);
+      }
+    });
+
+    // 4. Data Saver Auto-suggestion on sustained cellular connection (Part 8)
+    shouldSuggestDataSaver().then((suggest) => {
+      if (suggest) {
+        Alert.alert(
+          'Mobile Data Detected',
+          'Would you like to turn on Data Saver Mode to compress map photo thumbnails and defer heavy background syncs to Wi-Fi?',
+          [
+            {
+              text: 'No Thanks',
+              style: 'cancel',
+              onPress: () => markDataSaverSuggestionSeen(),
+            },
+            {
+              text: 'Enable Data Saver',
+              onPress: async () => {
+                await setDataSaverEnabled(true);
+                await markDataSaverSuggestionSeen();
+                Toast.show({
+                  type: 'success',
+                  text1: 'Data Saver Active',
+                  text2: 'Optimizing mobile data consumption.',
+                });
+              },
+            },
+          ]
+        );
       }
     });
   }, []);
@@ -75,178 +142,213 @@ export default function App() {
     setAuthStep('walkthrough');
   };
 
+  const handleShareClusterImpact = (clusterData: any) => {
+    setShareData({
+      type: 'resolved_issue',
+      title: `${clusterData.mission_type?.replace('_', ' ').toUpperCase() || 'CIVIC ISSUE'} RESOLVED!`,
+      category: clusterData.mission_type,
+      issueId: clusterData.id,
+      wardName: 'Bengaluru East',
+      beforePhotoUrl: clusterData.photo_url || undefined,
+    });
+    setShareModalVisible(true);
+  };
+
   return (
     <GestureHandlerRootView style={styles.flexOne}>
       <SafeAreaProvider>
         <ThemeProvider>
           <ErrorBoundary>
             <SafeAreaView style={styles.rootContainer}>
-          {/* Root Offline Network Indicator */}
-          <OfflineBanner isOffline={isOffline} />
+              {/* Root Offline Network Indicator */}
+              <OfflineBanner isOffline={isOffline} />
 
-          {/* Render Unauthenticated Auth Stack or Authenticated Main Shell */}
-          {authStep === 'splash' && <SplashScreen onFinish={handleSplashFinish} />}
-          {authStep === 'walkthrough' && <OnboardingWalkthroughScreen onComplete={handleWalkthroughComplete} />}
-          {authStep === 'language' && <LanguageSelectScreen onSelectLanguage={handleLanguageComplete} />}
-          {authStep === 'auth' && (
-            <View style={styles.flexOne}>
-              <AuthScreen onAuthSuccess={handleAuthSuccess} />
-            </View>
-          )}
-          {authStep === 'consent' && (
-            <View style={styles.flexOne}>
-              <ConsentScreen onAcceptConsent={handleConsentAccept} />
-            </View>
-          )}
+              {/* Render Unauthenticated Auth Stack or Authenticated Main Shell */}
+              {authStep === 'splash' && <SplashScreen onFinish={handleSplashFinish} />}
+              {authStep === 'walkthrough' && <OnboardingWalkthroughScreen onComplete={handleWalkthroughComplete} />}
+              {authStep === 'language' && <LanguageSelectScreen onSelectLanguage={handleLanguageComplete} />}
+              {authStep === 'auth' && (
+                <View style={styles.flexOne}>
+                  <AuthScreen onAuthSuccess={handleAuthSuccess} />
+                </View>
+              )}
+              {authStep === 'consent' && (
+                <View style={styles.flexOne}>
+                  <ConsentScreen onAcceptConsent={handleConsentAccept} />
+                </View>
+              )}
 
-          {authStep === 'authenticated' && (
-            <View style={styles.flexOne}>
-              {/* Active Tab Screen */}
-              <View style={styles.mainContent}>
-                {activeTab === 'home' && <MapScreen />}
-                {activeTab === 'my_reports' && <SubmissionsScreen />}
-                {activeTab === 'profile' && (
-                  <ProfileSettingsScreen
-                    onOpenLegalSettings={() => setActiveModal('legal')}
-                    onChangeLanguage={() => setAuthStep('language')}
-                    onOpenNotificationCenter={() => setActiveModal('notifications')}
-                    onLogout={handleLogout}
+              {authStep === 'authenticated' && (
+                <View style={styles.flexOne}>
+                  {/* Active Tab Screen */}
+                  <View style={styles.mainContent}>
+                    {activeTab === 'home' && <MapScreen />}
+                    {activeTab === 'my_reports' && <SubmissionsScreen />}
+                    {activeTab === 'profile' && (
+                      <ProfileSettingsScreen
+                        onOpenLegalSettings={() => setActiveModal('legal')}
+                        onChangeLanguage={() => setAuthStep('language')}
+                        onOpenNotificationCenter={() => setActiveModal('notifications')}
+                        onLogout={handleLogout}
+                      />
+                    )}
+                  </View>
+
+                  {/* Master 4-Tab Bottom Navigation Bar */}
+                  <View style={styles.tabBar}>
+                    <Pressable
+                      style={styles.tabItem}
+                      onPress={() => setActiveTab('home')}
+                    >
+                      <MapPin size={22} color={activeTab === 'home' ? '#4F46E5' : '#64748B'} />
+                      <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>
+                        {t('mapTab')}
+                      </Text>
+                    </Pressable>
+
+                    {/* Center Modal Launcher "Report" Tab */}
+                    <Pressable
+                      style={styles.reportTabLauncher}
+                      onPress={() => {
+                        setTaggedAsset(null);
+                        setActiveModal('picker');
+                      }}
+                    >
+                      <View style={styles.reportIconCircle}>
+                        <PlusCircle size={28} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.reportLabel}>{t('reportTab')}</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.tabItem}
+                      onPress={() => setActiveTab('my_reports')}
+                    >
+                      <List size={22} color={activeTab === 'my_reports' ? '#4F46E5' : '#64748B'} />
+                      <Text style={[styles.tabLabel, activeTab === 'my_reports' && styles.tabLabelActive]}>
+                        {t('myReportsTab')}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.tabItem}
+                      onPress={() => setActiveTab('profile')}
+                    >
+                      <User size={22} color={activeTab === 'profile' ? '#4F46E5' : '#64748B'} />
+                      <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>
+                        {t('profileTab')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* Category-Tailored Modal Stack */}
+              <Modal visible={Boolean(activeModal)} animationType="slide">
+                {activeModal === 'picker' && (
+                  <ReportCategoryPickerScreen
+                    onSelectCategory={(catId) => {
+                      if (catId === 'standard') setActiveModal('standard');
+                      else if (catId === 'accessibility') setActiveModal('accessibility');
+                      else if (catId === 'safety_concern') setActiveModal('safety');
+                      else if (catId === 'utility_outage') setActiveModal('utility');
+                    }}
+                    onClose={() => setActiveModal(null)}
                   />
                 )}
-              </View>
 
-              {/* Master 4-Tab Bottom Navigation Bar */}
-              <View style={styles.tabBar}>
-                <Pressable
-                  style={styles.tabItem}
-                  onPress={() => setActiveTab('home')}
-                >
-                  <MapPin size={22} color={activeTab === 'home' ? '#4F46E5' : '#64748B'} />
-                  <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>
-                    {t('mapTab')}
-                  </Text>
-                </Pressable>
+                {activeModal === 'standard' && (
+                  <CaptureScreen
+                    onCaptureSuccess={() => {
+                      setTaggedAsset(null);
+                      setActiveModal(null);
+                    }}
+                    initialAssetId={taggedAsset?.assetId}
+                    initialCategory={taggedAsset?.category}
+                    initialLocation={
+                      taggedAsset?.latitude && taggedAsset?.longitude
+                        ? { latitude: taggedAsset.latitude, longitude: taggedAsset.longitude }
+                        : undefined
+                    }
+                  />
+                )}
 
-                {/* Center Modal Launcher "Report" Tab */}
-                <Pressable
-                  style={styles.reportTabLauncher}
-                  onPress={() => setActiveModal('picker')}
-                >
-                  <View style={styles.reportIconCircle}>
-                    <PlusCircle size={28} color="#FFFFFF" />
+                {activeModal === 'accessibility' && (
+                  <AccessibilityAuditFormScreen
+                    onBack={() => setActiveModal('picker')}
+                    onSubmitSuccess={() => setActiveModal(null)}
+                  />
+                )}
+
+                {activeModal === 'safety' && (
+                  <SafetyConcernFormScreen
+                    onBack={() => setActiveModal('picker')}
+                    onSubmitSuccess={() => setActiveModal(null)}
+                  />
+                )}
+
+                {activeModal === 'utility' && (
+                  <UtilityOutageFormScreen
+                    onBack={() => setActiveModal('picker')}
+                    onSubmitSuccess={() => setActiveModal(null)}
+                  />
+                )}
+
+                {activeModal === 'notifications' && (
+                  <NotificationCenterScreen
+                    onBack={() => setActiveModal(null)}
+                    onSelectCluster={(clusterId) => {
+                      setSelectedClusterId(clusterId);
+                      setActiveModal('cluster_detail');
+                    }}
+                  />
+                )}
+
+                {activeModal === 'cluster_detail' && (
+                  <ClusterDetailScreen
+                    clusterId={selectedClusterId || ''}
+                    onBack={() => setActiveModal('notifications')}
+                    onShareImpact={handleShareClusterImpact}
+                  />
+                )}
+
+                {activeModal === 'legal' && (
+                  <View style={styles.flexOne}>
+                    <Pressable
+                      style={styles.modalCloseHeader}
+                      onPress={() => setActiveModal(null)}
+                    >
+                      <Text style={styles.modalCloseText}>← Back to Profile Settings</Text>
+                    </Pressable>
+                    <LegalSettingsScreen />
                   </View>
-                  <Text style={styles.reportLabel}>{t('reportTab')}</Text>
-                </Pressable>
+                )}
+              </Modal>
 
-                <Pressable
-                  style={styles.tabItem}
-                  onPress={() => setActiveTab('my_reports')}
-                >
-                  <List size={22} color={activeTab === 'my_reports' ? '#4F46E5' : '#64748B'} />
-                  <Text style={[styles.tabLabel, activeTab === 'my_reports' && styles.tabLabelActive]}>
-                    {t('myReportsTab')}
-                  </Text>
-                </Pressable>
+              {/* Shareable Impact Card Modal (Part 3) */}
+              <SocialImpactShareModal
+                visible={shareModalVisible}
+                data={shareData}
+                onClose={() => setShareModalVisible(false)}
+              />
 
-                <Pressable
-                  style={styles.tabItem}
-                  onPress={() => setActiveTab('profile')}
-                >
-                  <User size={22} color={activeTab === 'profile' ? '#4F46E5' : '#64748B'} />
-                  <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>
-                    {t('profileTab')}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-
-          {/* Category-Tailored Modal Stack */}
-          <Modal visible={Boolean(activeModal)} animationType="slide">
-            {activeModal === 'picker' && (
-              <ReportCategoryPickerScreen
-                onSelectCategory={(catId) => {
-                  if (catId === 'standard') setActiveModal('standard');
-                  else if (catId === 'accessibility') setActiveModal('accessibility');
-                  else if (catId === 'safety_concern') setActiveModal('safety');
-                  else if (catId === 'utility_outage') setActiveModal('utility');
+              {/* Root Emergency Hazard Takeover Broadcast Overlay */}
+              <HazardAlertTakeoverModal
+                visible={hazardAlertVisible}
+                hazardType="waterlogging"
+                onViewOnMap={() => {
+                  setHazardAlertVisible(false);
+                  setActiveTab('home');
                 }}
-                onClose={() => setActiveModal(null)}
+                onDismiss={() => setHazardAlertVisible(false)}
               />
-            )}
 
-            {activeModal === 'standard' && (
-              <CaptureScreen onCaptureSuccess={() => setActiveModal(null)} />
-            )}
-
-            {activeModal === 'accessibility' && (
-              <AccessibilityAuditFormScreen
-                onBack={() => setActiveModal('picker')}
-                onSubmitSuccess={() => setActiveModal(null)}
-              />
-            )}
-
-            {activeModal === 'safety' && (
-              <SafetyConcernFormScreen
-                onBack={() => setActiveModal('picker')}
-                onSubmitSuccess={() => setActiveModal(null)}
-              />
-            )}
-
-            {activeModal === 'utility' && (
-              <UtilityOutageFormScreen
-                onBack={() => setActiveModal('picker')}
-                onSubmitSuccess={() => setActiveModal(null)}
-              />
-            )}
-
-            {activeModal === 'notifications' && (
-              <NotificationCenterScreen
-                onBack={() => setActiveModal(null)}
-                onSelectCluster={(clusterId) => {
-                  setSelectedClusterId(clusterId);
-                  setActiveModal('cluster_detail');
-                }}
-              />
-            )}
-
-            {activeModal === 'cluster_detail' && (
-              <ClusterDetailScreen
-                clusterId={selectedClusterId || ''}
-                onBack={() => setActiveModal('notifications')}
-              />
-            )}
-
-            {activeModal === 'legal' && (
-              <View style={styles.flexOne}>
-                <Pressable
-                  style={styles.modalCloseHeader}
-                  onPress={() => setActiveModal(null)}
-                >
-                  <Text style={styles.modalCloseText}>← Back to Profile Settings</Text>
-                </Pressable>
-                <LegalSettingsScreen />
-              </View>
-            )}
-          </Modal>
-
-          {/* Root Emergency Hazard Takeover Broadcast Overlay */}
-          <HazardAlertTakeoverModal
-            visible={hazardAlertVisible}
-            hazardType="waterlogging"
-            onViewOnMap={() => {
-              setHazardAlertVisible(false);
-              setActiveTab('home');
-            }}
-            onDismiss={() => setHazardAlertVisible(false)}
-          />
-
-          <Toast />
-        </SafeAreaView>
-      </ErrorBoundary>
-    </ThemeProvider>
-  </SafeAreaProvider>
-</GestureHandlerRootView>
+              <Toast />
+            </SafeAreaView>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
