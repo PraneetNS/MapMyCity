@@ -4,10 +4,14 @@ import { apiFetch } from '../config/apiClient';
 
 export interface UserSession {
   userId: string;
-  phoneHash: string;
+  phoneHash?: string | null;
   deviceId: string;
+  authProvider: 'phone_otp' | 'google' | 'apple';
+  email?: string | null;
+  displayName?: string | null;
   isBanned: boolean;
   trustScore: number;
+  hasSmsAlerts: boolean;
 }
 
 const SESSION_STORAGE_KEY = 'CROWDSENSE_USER_SESSION';
@@ -107,15 +111,60 @@ export async function verifyPhoneOtp(phoneNumber: string, otpCode: string, devic
     const session: UserSession = {
       userId: res.user_id,
       phoneHash: res.phone_hash,
+      authProvider: 'phone_otp',
       deviceId,
       isBanned: Boolean(res.is_banned),
       trustScore: res.trust_score ?? 0.5,
+      hasSmsAlerts: true,
     };
 
     await saveUserSession(session);
     return session;
   } catch (err: any) {
     throw new Error(err?.message || 'Invalid or expired OTP code');
+  }
+}
+
+/**
+ * Signs in or registers via Google or Apple Social Sign-In.
+ */
+export async function signInWithSocial(
+  provider: 'google' | 'apple',
+  deviceId: string,
+  mockProfile?: { email?: string; name?: string; externalId?: string }
+): Promise<UserSession> {
+  try {
+    const externalId = mockProfile?.externalId || `${provider}_usr_${Date.now().toString(36)}`;
+    const email = mockProfile?.email || `citizen_${provider}@example.com`;
+    const displayName = mockProfile?.name || `${provider === 'google' ? 'Google' : 'Apple'} Verified Citizen`;
+
+    const res = await apiFetch('/auth/social/verify', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider,
+        external_id: externalId,
+        email,
+        display_name: displayName,
+        device_id: deviceId,
+      }),
+    });
+
+    const session: UserSession = {
+      userId: res.user_id,
+      phoneHash: res.phone_hash || null,
+      authProvider: provider,
+      email: res.email || email,
+      displayName: res.display_name || displayName,
+      deviceId,
+      isBanned: Boolean(res.is_banned),
+      trustScore: res.trust_score ?? 0.5,
+      hasSmsAlerts: Boolean(res.has_sms_alerts),
+    };
+
+    await saveUserSession(session);
+    return session;
+  } catch (err: any) {
+    throw new Error(err?.message || `Failed to authenticate with ${provider}.`);
   }
 }
 
