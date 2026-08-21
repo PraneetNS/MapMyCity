@@ -15,7 +15,6 @@ import { Platform, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
-import { Audio } from 'expo-av';
 
 export type ResourcePermissionType = 
   | 'camera'
@@ -90,7 +89,7 @@ export async function checkPermissionStatus(
         return status === 'denied' ? 'denied' : 'undetermined';
       }
       case 'microphone': {
-        const { status, canAskAgain } = await Audio.getPermissionsAsync();
+        const { status, canAskAgain } = await Camera.getMicrophonePermissionsAsync();
         if (status === 'granted') return 'granted';
         if (!canAskAgain && status === 'denied') return 'blocked';
         return status === 'denied' ? 'denied' : 'undetermined';
@@ -126,7 +125,7 @@ export async function requestNativePermission(
         return !res.canAskAgain ? 'blocked' : 'denied';
       }
       case 'microphone': {
-        const res = await Audio.requestPermissionsAsync();
+        const res = await Camera.requestMicrophonePermissionsAsync();
         if (res.granted) return 'granted';
         return !res.canAskAgain ? 'blocked' : 'denied';
       }

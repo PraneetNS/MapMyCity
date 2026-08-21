@@ -131,7 +131,7 @@ export function PermissionPromptModal({
 
             <Button
               title="Not Now (Use Fallback)"
-              variant="outline"
+              variant="secondary"
               onPress={onDenyOrFallback}
               style={styles.secondaryAction}
             />
