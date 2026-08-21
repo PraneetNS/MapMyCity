@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTotalModelStorageBytes, clearAllModelCaches } from './ModelManager';
+import { getOfflineStorageFootprintMB } from './offlineMapManager';
 
 /**
- * Calculates current cached file & on-device model storage footprint in Megabytes (MB).
+ * Calculates current cached file, on-device model, and offline map storage footprint in Megabytes (MB).
  */
 export async function getCacheStorageFootprintMB(): Promise<number> {
   try {
@@ -13,8 +14,9 @@ export async function getCacheStorageFootprintMB(): Promise<number> {
       if (val) totalChars += val.length;
     }
     const modelBytes = await getTotalModelStorageBytes();
-    const totalBytes = totalChars + modelBytes;
-    return Number((totalBytes / (1024 * 1024)).toFixed(1));
+    const offlineMB = await getOfflineStorageFootprintMB();
+    const rawMB = totalChars / (1024 * 1024) + modelBytes / (1024 * 1024) + offlineMB;
+    return Number(rawMB.toFixed(1));
   } catch (_) {
     return 0.0;
   }
