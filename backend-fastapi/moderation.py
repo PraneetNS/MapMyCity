@@ -151,3 +151,50 @@ async def check_image_content(photo_url: str) -> Dict[str, Any]:
             "reasons": [],
             "raw_response": {"error": str(e)}
         }
+
+import re
+
+# Basic offensive words / spam tokens list
+BANNED_WORDS = {
+    "hate", "scam", "fraud", "fake", "idiot", "stupid", "abuse", "kill", "attack"
+}
+
+PHONE_REGEX = re.compile(r'\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{10}\b')
+EMAIL_REGEX = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+
+def check_text_content(text_content: str) -> Dict[str, Any]:
+    """
+    Validates and sanitizes user-provided comment/note text:
+    - Filters offensive keywords
+    - Masks phone numbers and email addresses to protect PII
+    - Flags suspicious/spam content
+    """
+    if not text_content or not text_content.strip():
+        return {
+            "is_safe": False,
+            "sanitized_text": "",
+            "reason": "empty_text"
+        }
+
+    # Redact raw phone numbers & email addresses for privacy
+    redacted = PHONE_REGEX.sub("[PHONE REDACTED]", text_content)
+    redacted = EMAIL_REGEX.sub("[EMAIL REDACTED]", redacted)
+
+    words = set(re.findall(r'\b\w+\b', redacted.lower()))
+    found_banned = words.intersection(BANNED_WORDS)
+
+    if found_banned:
+        # Mask offensive words
+        for bad_word in found_banned:
+            pattern = re.compile(rf'\b{re.escape(bad_word)}\b', re.IGNORECASE)
+            redacted = pattern.sub("****", redacted)
+
+    is_safe = len(found_banned) < 3  # Allow minor masking, reject heavy violations
+
+    return {
+        "is_safe": is_safe,
+        "sanitized_text": redacted.strip(),
+        "reason": "offensive_content" if not is_safe else None,
+        "pii_redacted": redacted != text_content
+    }
+
