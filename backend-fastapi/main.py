@@ -24,7 +24,7 @@ import redis.asyncio as aioredis
 from database import get_db
 import config.cloudinary as cloudinary_config
 import cloudinary.utils
-from moderation import check_image_content
+from moderation import check_image_content, check_text_content
 from services.triage_summary import generate_grounded_triage_summary, batch_refresh_cluster_summaries
 from services.recurrence_predictor import predict_recurrence_risk
 from services.smart_digest import generate_smart_user_digest
@@ -641,6 +641,7 @@ class SubmissionCreate(BaseModel):
     captured_at: datetime = Field(..., description="ISO 8601 timestamp when photo was taken.")
     mission_type: Literal['pothole', 'garbage', 'noise', 'accessibility', 'infrastructure'] = Field('pothole', description="Type of mission")
     notes: Optional[str] = Field(None, description="Optional description details.")
+    asset_id: Optional[str] = Field(None, description="Optional municipal physical asset code from QR scan.")
 
 class SubmissionResponse(BaseModel):
     id: uuid.UUID
@@ -657,6 +658,7 @@ class SubmissionResponse(BaseModel):
     flags: Optional[List] = []
     cluster_id: Optional[uuid.UUID] = None
     resolution_photo_url: Optional[str] = None
+    asset_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -791,6 +793,34 @@ class RecurrenceCheckRequest(BaseModel):
     past_reopen_count: Optional[int] = Field(0, description="Past reopen count for this cluster")
     is_monsoon_season: Optional[bool] = Field(False, description="Monsoon weather flag")
 
+class SocialAuthVerify(BaseModel):
+    provider: Literal['google', 'apple'] = Field(..., description="Social identity provider")
+    external_id: str = Field(..., description="Unique provider user ID")
+    email: Optional[str] = Field(None, description="User verified email from social login")
+    display_name: Optional[str] = Field(None, description="User public display name")
+    id_token: Optional[str] = Field(None, description="Provider auth token/credential")
+    device_id: Optional[str] = Field(None, description="Associated device identifier")
+
+class ClusterCommentCreate(BaseModel):
+    body: str = Field(..., description="Citizen comment or discussion context")
+    user_id: Optional[str] = Field(None, description="User ID posting the comment")
+    author_name: Optional[str] = Field("Civic Resident", description="Display name for comment")
+    is_anonymous: Optional[bool] = Field(False, description="Whether to mask user identity")
+
+class CommentFlagSubmit(BaseModel):
+    reason: Literal['spam', 'offensive', 'misinformation', 'harassment', 'other'] = Field(..., description="Reason for flagging comment")
+    reporter_user_id: Optional[str] = Field(None, description="User ID reporting the comment")
+
+class MunicipalAssetCreate(BaseModel):
+    asset_code: str = Field(..., description="Unique municipal identifier e.g. SL-BLR-5402")
+    asset_type: str = Field(..., description="Type of asset e.g. streetlight, waste_bin, bus_shelter")
+    ward_name: str = Field(..., description="Ward name or district")
+    latitude: float = Field(..., description="Physical latitude coordinate")
+    longitude: float = Field(..., description="Physical longitude coordinate")
+    category_preset: str = Field(..., description="Default issue category mapped to this asset")
+    metadata: Optional[dict] = Field(default_factory=dict, description="Arbitrary municipal metadata")
+
+
 from fastapi.responses import JSONResponse
 
 from fastapi.exceptions import RequestValidationError
@@ -915,7 +945,8 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
             "notes": data.notes,
             "p_hash": p_hash,
             "flags": flags,
-            "cluster_id": None
+            "cluster_id": None,
+            "asset_id": data.asset_id
         }
         MOCK_SUBMISSIONS.append(row)
         
@@ -965,7 +996,8 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
             status,
             notes,
             p_hash,
-            flags
+            flags,
+            asset_id
         ) VALUES (
             :device_id,
             :mission_type,
@@ -978,8 +1010,9 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
             :status,
             :notes,
             :p_hash,
-            :flags::jsonb
-        ) RETURNING id, device_id, mission_type, photo_url, latitude, longitude, captured_at, submitted_at, status, notes, p_hash, flags, cluster_id
+            :flags::jsonb,
+            :asset_id
+        ) RETURNING id, device_id, mission_type, photo_url, latitude, longitude, captured_at, submitted_at, status, notes, p_hash, flags, cluster_id, asset_id
     """)
 
     try:
@@ -993,7 +1026,8 @@ async def create_submission(data: SubmissionCreate, background_tasks: Background
             "status": status,
             "notes": data.notes,
             "p_hash": p_hash,
-            "flags": json.dumps(flags)
+            "flags": json.dumps(flags),
+            "asset_id": data.asset_id
         })
         await db.commit()
         row = result.fetchone()
@@ -1645,6 +1679,66 @@ async def get_clusters(
 # Auth & Safety Memory Mocks
 MOCK_USERS = {}
 MOCK_PEER_REPORTS = []
+MOCK_CLUSTER_COMMENTS = [
+    {
+        "id": "c1a2b3c4-0001-4000-8000-000000000001",
+        "cluster_id": "mock-cluster-1",
+        "user_id": "user-1",
+        "author_name": "Ramesh K.",
+        "body": "Pothole deepens after heavy rain yesterday. Please avoid bike lane.",
+        "is_anonymous": False,
+        "is_flagged": False,
+        "flag_count": 0,
+        "created_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    },
+    {
+        "id": "c1a2b3c4-0002-4000-8000-000000000002",
+        "cluster_id": "mock-cluster-1",
+        "user_id": "user-2",
+        "author_name": "Civic Volunteer",
+        "body": "BBMP road crew inspected the site earlier today around 11 AM.",
+        "is_anonymous": False,
+        "is_flagged": False,
+        "flag_count": 0,
+        "created_at": (datetime.now(timezone.utc) - timedelta(minutes=45)).isoformat()
+    }
+]
+MOCK_COMMENT_FLAGS = []
+MOCK_MUNICIPAL_ASSETS = [
+    {
+        "id": "a1b2c3d4-0001-4000-8000-000000000001",
+        "asset_code": "SL-BLR-5402",
+        "asset_type": "streetlight",
+        "ward_name": "Bengaluru East - Ward 12",
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "category_preset": "street_lighting",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "metadata": {"pole_material": "steel", "installed_year": 2023}
+    },
+    {
+        "id": "a1b2c3d4-0002-4000-8000-000000000002",
+        "asset_code": "WB-KOR-102",
+        "asset_type": "waste_bin",
+        "ward_name": "Koramangala - Ward 151",
+        "latitude": 12.9352,
+        "longitude": 77.6245,
+        "category_preset": "garbage_dump",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "metadata": {"bin_capacity_liters": 500}
+    },
+    {
+        "id": "a1b2c3d4-0003-4000-8000-000000000003",
+        "asset_code": "BS-IND-091",
+        "asset_type": "bus_shelter",
+        "ward_name": "Indiranagar - Ward 80",
+        "latitude": 12.9784,
+        "longitude": 77.6408,
+        "category_preset": "accessibility",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "metadata": {"shelter_name": "CMH Road Junction Stop"}
+    }
+]
 
 @app.post("/auth/otp/request", tags=["Authentication"])
 async def request_otp(data: AuthOtpRequest, db: AsyncSession = Depends(get_db)):
@@ -1666,16 +1760,19 @@ async def verify_otp(data: AuthOtpVerify, db: AsyncSession = Depends(get_db)):
             MOCK_USERS[data.phone_hash] = {
                 "user_id": str(uuid.uuid4()),
                 "phone_hash": data.phone_hash,
+                "auth_provider": "phone_otp",
                 "device_id": data.device_id,
                 "is_banned": False,
                 "trust_score": 0.5,
+                "has_phone": True,
+                "has_sms_alerts": True,
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
         user = MOCK_USERS[data.phone_hash]
         return user
 
     try:
-        res = await db.execute(text("SELECT id, phone_hash, is_banned, trust_score FROM users WHERE phone_hash = :ph"), {"ph": data.phone_hash})
+        res = await db.execute(text("SELECT id, phone_hash, is_banned, trust_score, auth_provider FROM users WHERE phone_hash = :ph"), {"ph": data.phone_hash})
         row = res.fetchone()
         if not row:
             if data.device_id:
@@ -1684,7 +1781,7 @@ async def verify_otp(data: AuthOtpVerify, db: AsyncSession = Depends(get_db)):
                     {"did": data.device_id}
                 )
             ins = await db.execute(
-                text("INSERT INTO users (phone_hash, device_id, trust_score) VALUES (:ph, :did, 0.5) RETURNING id, phone_hash, is_banned, trust_score"),
+                text("INSERT INTO users (phone_hash, device_id, trust_score, auth_provider) VALUES (:ph, :did, 0.5, 'phone_otp') RETURNING id, phone_hash, is_banned, trust_score, auth_provider"),
                 {"ph": data.phone_hash, "did": data.device_id}
             )
             row = ins.fetchone()
@@ -1694,12 +1791,377 @@ async def verify_otp(data: AuthOtpVerify, db: AsyncSession = Depends(get_db)):
         return {
             "user_id": str(row_dict["id"]),
             "phone_hash": row_dict["phone_hash"],
+            "auth_provider": row_dict.get("auth_provider", "phone_otp"),
             "is_banned": row_dict["is_banned"],
-            "trust_score": row_dict["trust_score"]
+            "trust_score": row_dict["trust_score"],
+            "has_phone": True,
+            "has_sms_alerts": True
         }
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Auth error: {str(e)}")
+
+@app.post("/auth/social/verify", tags=["Authentication"])
+async def verify_social_login(data: SocialAuthVerify, db: AsyncSession = Depends(get_db)):
+    """
+    Verifies and registers/authenticates users via Google or Apple Social Sign-In.
+    Social sign-in accounts coexist with phone-OTP accounts in the same users schema.
+    """
+    mock_key = f"social_{data.provider}_{data.external_id}"
+    if USE_MOCK:
+        if mock_key not in MOCK_USERS:
+            MOCK_USERS[mock_key] = {
+                "user_id": str(uuid.uuid4()),
+                "auth_provider": data.provider,
+                "external_id": data.external_id,
+                "email": data.email,
+                "display_name": data.display_name or f"{data.provider.capitalize()} Citizen",
+                "device_id": data.device_id,
+                "phone_hash": None,
+                "is_banned": False,
+                "trust_score": 0.5,
+                "has_phone": False,
+                "has_sms_alerts": False,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        return MOCK_USERS[mock_key]
+
+    try:
+        res = await db.execute(
+            text("SELECT id, auth_provider, external_id, email, display_name, phone_hash, is_banned, trust_score FROM users WHERE auth_provider = :p AND external_id = :ext"),
+            {"p": data.provider, "ext": data.external_id}
+        )
+        row = res.fetchone()
+        if not row:
+            if data.device_id:
+                await db.execute(
+                    text("INSERT INTO devices (device_id, trust_score) VALUES (:did, 0.5) ON CONFLICT (device_id) DO NOTHING"),
+                    {"did": data.device_id}
+                )
+            ins = await db.execute(
+                text("""
+                    INSERT INTO users (auth_provider, external_id, email, display_name, device_id, trust_score)
+                    VALUES (:p, :ext, :email, :name, :did, 0.5)
+                    RETURNING id, auth_provider, external_id, email, display_name, phone_hash, is_banned, trust_score
+                """),
+                {
+                    "p": data.provider,
+                    "ext": data.external_id,
+                    "email": data.email,
+                    "name": data.display_name or f"{data.provider.capitalize()} Citizen",
+                    "did": data.device_id
+                }
+            )
+            row = ins.fetchone()
+            await db.commit()
+
+        row_dict = dict(row._mapping)
+        has_phone = bool(row_dict.get("phone_hash"))
+        return {
+            "user_id": str(row_dict["id"]),
+            "auth_provider": row_dict["auth_provider"],
+            "external_id": row_dict["external_id"],
+            "email": row_dict.get("email"),
+            "display_name": row_dict.get("display_name"),
+            "is_banned": row_dict["is_banned"],
+            "trust_score": row_dict["trust_score"],
+            "has_phone": has_phone,
+            "has_sms_alerts": has_phone
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Social auth error: {str(e)}")
+
+# ==========================================
+# Cluster Comments & Discussion Threads (Part 9)
+# ==========================================
+
+@app.get("/clusters/{cluster_id}/comments", tags=["Discussions"])
+async def get_cluster_comments(cluster_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Returns the discussion thread for a given cluster.
+    Enforces anonymity rules: comments on safety_concern clusters or anonymous comments
+    have reporter identity stripped.
+    """
+    if USE_MOCK:
+        comments = [c for c in MOCK_CLUSTER_COMMENTS if str(c.get("cluster_id")) == str(cluster_id) and not c.get("is_flagged")]
+        # Also check if cluster category is safety_concern
+        is_safety = False
+        for cl in MOCK_CLUSTERS:
+            if str(cl.get("id")) == str(cluster_id) and cl.get("mission_type") == "safety_concern":
+                is_safety = True
+                break
+        
+        sanitized = []
+        for c in comments:
+            item = dict(c)
+            if is_safety or item.get("is_anonymous"):
+                item["author_name"] = "Anonymous Resident"
+                item["user_id"] = None
+            sanitized.append(item)
+        return sanitized
+
+    try:
+        # Check cluster category for safety anonymity rule
+        cl_res = await db.execute(text("SELECT mission_type FROM clusters WHERE id = :cid"), {"cid": cluster_id})
+        cl_row = cl_res.fetchone()
+        is_safety = cl_row and cl_row.mission_type == "safety_concern"
+
+        query = text("""
+            SELECT id, cluster_id, user_id, author_name, body, is_anonymous, is_flagged, flag_count, created_at
+            FROM cluster_comments
+            WHERE cluster_id = :cid AND (is_flagged = FALSE OR is_flagged IS NULL)
+            ORDER BY created_at ASC
+        """)
+        res = await db.execute(query, {"cid": cluster_id})
+        rows = res.fetchall()
+
+        result = []
+        for row in rows:
+            r = dict(row._mapping)
+            r["id"] = str(r["id"])
+            r["cluster_id"] = str(r["cluster_id"])
+            if is_safety or r.get("is_anonymous"):
+                r["author_name"] = "Anonymous Resident"
+                r["user_id"] = None
+            elif r.get("user_id"):
+                r["user_id"] = str(r["user_id"])
+            r["created_at"] = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+            result.append(r)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch comments: {str(e)}")
+
+@app.post("/clusters/{cluster_id}/comments", tags=["Discussions"])
+async def create_cluster_comment(cluster_id: str, data: ClusterCommentCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Posts a new contextual comment to a cluster thread.
+    Passes text through input sanitization, PII redaction, and profanity filtering.
+    """
+    mod_check = check_text_content(data.body)
+    if not mod_check["is_safe"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Comment violates community guidelines (abusive language or excessive profanity detected)."
+        )
+
+    clean_body = mod_check["sanitized_text"]
+    author = data.author_name or "Civic Resident"
+    if data.is_anonymous:
+        author = "Anonymous Resident"
+
+    if USE_MOCK:
+        comment_id = str(uuid.uuid4())
+        new_comment = {
+            "id": comment_id,
+            "cluster_id": cluster_id,
+            "user_id": None if data.is_anonymous else data.user_id,
+            "author_name": author,
+            "body": clean_body,
+            "is_anonymous": bool(data.is_anonymous),
+            "is_flagged": False,
+            "flag_count": 0,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        MOCK_CLUSTER_COMMENTS.append(new_comment)
+        return new_comment
+
+    try:
+        query = text("""
+            INSERT INTO cluster_comments (cluster_id, user_id, author_name, body, is_anonymous)
+            VALUES (:cid, :uid, :author, :body, :anon)
+            RETURNING id, cluster_id, user_id, author_name, body, is_anonymous, is_flagged, flag_count, created_at
+        """)
+        res = await db.execute(query, {
+            "cid": cluster_id,
+            "uid": None if data.is_anonymous else data.user_id,
+            "author": author,
+            "body": clean_body,
+            "anon": bool(data.is_anonymous)
+        })
+        await db.commit()
+        row = res.fetchone()
+        r = dict(row._mapping)
+        r["id"] = str(r["id"])
+        r["cluster_id"] = str(r["cluster_id"])
+        r["user_id"] = str(r["user_id"]) if r.get("user_id") else None
+        r["created_at"] = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+        return r
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to post comment: {str(e)}")
+
+@app.post("/comments/{comment_id}/flag", tags=["Discussions"])
+async def flag_comment(comment_id: str, data: CommentFlagSubmit, db: AsyncSession = Depends(get_db)):
+    """
+    Submits a community moderation flag for an abusive or spam comment.
+    Auto-hides comments that receive 3 or more flags.
+    """
+    if USE_MOCK:
+        MOCK_COMMENT_FLAGS.append({
+            "id": str(uuid.uuid4()),
+            "comment_id": comment_id,
+            "reporter_user_id": data.reporter_user_id,
+            "reason": data.reason,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        for c in MOCK_CLUSTER_COMMENTS:
+            if str(c.get("id")) == str(comment_id):
+                c["flag_count"] = c.get("flag_count", 0) + 1
+                if c["flag_count"] >= 3:
+                    c["is_flagged"] = True
+                break
+        return {"status": "success", "message": "Comment flag submitted"}
+
+    try:
+        await db.execute(
+            text("INSERT INTO comment_flags (comment_id, reporter_user_id, reason) VALUES (:cid, :uid, :reason)"),
+            {"cid": comment_id, "uid": data.reporter_user_id, "reason": data.reason}
+        )
+        await db.execute(
+            text("""
+                UPDATE cluster_comments
+                SET flag_count = flag_count + 1,
+                    is_flagged = CASE WHEN flag_count + 1 >= 3 THEN TRUE ELSE is_flagged END
+                WHERE id = :cid
+            """),
+            {"cid": comment_id}
+        )
+        await db.commit()
+        return {"status": "success", "message": "Comment flag submitted"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to flag comment: {str(e)}")
+
+# ==========================================
+# Municipal Assets & Physical QR Tagging (Part 7)
+# ==========================================
+
+@app.get("/admin/assets", tags=["Municipal Assets"])
+async def list_municipal_assets(ward_name: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """
+    Returns registered municipal assets with linked report counts.
+    """
+    if USE_MOCK:
+        assets = list(MOCK_MUNICIPAL_ASSETS)
+        if ward_name:
+            assets = [a for a in assets if ward_name.lower() in a.get("ward_name", "").lower()]
+        for a in assets:
+            code = a.get("asset_code")
+            a["report_count"] = sum(1 for s in MOCK_SUBMISSIONS if s.get("asset_id") == code)
+        return assets
+
+    try:
+        query = text("""
+            SELECT m.id, m.asset_code, m.asset_type, m.ward_name, m.latitude, m.longitude,
+                   m.category_preset, m.created_at, m.metadata,
+                   COUNT(s.id) as report_count
+            FROM municipal_assets m
+            LEFT JOIN submissions s ON s.asset_id = m.asset_code
+            WHERE (:ward IS NULL OR m.ward_name ILIKE '%' || :ward || '%')
+            GROUP BY m.id, m.asset_code, m.asset_type, m.ward_name, m.latitude, m.longitude, m.category_preset, m.created_at, m.metadata
+            ORDER BY m.created_at DESC
+        """)
+        res = await db.execute(query, {"ward": ward_name})
+        rows = res.fetchall()
+        result = []
+        for row in rows:
+            r = dict(row._mapping)
+            r["id"] = str(r["id"])
+            r["created_at"] = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+            result.append(r)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list municipal assets: {str(e)}")
+
+@app.post("/admin/assets", tags=["Municipal Assets"])
+async def create_municipal_asset(data: MunicipalAssetCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Registers a new municipal asset tag with pre-filled category and coordinates for QR generation.
+    """
+    if USE_MOCK:
+        new_asset = {
+            "id": str(uuid.uuid4()),
+            "asset_code": data.asset_code.upper().strip(),
+            "asset_type": data.asset_type,
+            "ward_name": data.ward_name,
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "category_preset": data.category_preset,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "metadata": data.metadata or {},
+            "report_count": 0
+        }
+        MOCK_MUNICIPAL_ASSETS.insert(0, new_asset)
+        return new_asset
+
+    try:
+        query = text("""
+            INSERT INTO municipal_assets (asset_code, asset_type, ward_name, latitude, longitude, category_preset, metadata)
+            VALUES (:code, :type, :ward, :lat, :lon, :cat, :meta::jsonb)
+            RETURNING id, asset_code, asset_type, ward_name, latitude, longitude, category_preset, created_at, metadata
+        """)
+        res = await db.execute(query, {
+            "code": data.asset_code.upper().strip(),
+            "type": data.asset_type,
+            "ward": data.ward_name,
+            "lat": data.latitude,
+            "lon": data.longitude,
+            "cat": data.category_preset,
+            "meta": json.dumps(data.metadata or {})
+        })
+        await db.commit()
+        row = res.fetchone()
+        r = dict(row._mapping)
+        r["id"] = str(r["id"])
+        r["created_at"] = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+        r["report_count"] = 0
+        return r
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create municipal asset: {str(e)}")
+
+@app.get("/admin/assets/{asset_code}/history", tags=["Municipal Assets"])
+async def get_asset_history(asset_code: str, db: AsyncSession = Depends(get_db)):
+    """
+    Retrieves full submission history and resolution tracking for a specific physical asset QR tag.
+    """
+    clean_code = asset_code.upper().strip()
+    if USE_MOCK:
+        reports = [s for s in MOCK_SUBMISSIONS if s.get("asset_id") == clean_code]
+        return {
+            "asset_code": clean_code,
+            "total_reports": len(reports),
+            "reports": reports
+        }
+
+    try:
+        query = text("""
+            SELECT id, device_id, mission_type, photo_url, latitude, longitude,
+                   captured_at, submitted_at, status, notes, cluster_id, asset_id
+            FROM submissions
+            WHERE asset_id = :code
+            ORDER BY submitted_at DESC
+        """)
+        res = await db.execute(query, {"code": clean_code})
+        rows = res.fetchall()
+        reports = []
+        for r in rows:
+            item = dict(r._mapping)
+            item["id"] = str(item["id"])
+            if item.get("cluster_id"):
+                item["cluster_id"] = str(item["cluster_id"])
+            item["captured_at"] = item["captured_at"].isoformat() if hasattr(item["captured_at"], "isoformat") else str(item["captured_at"])
+            item["submitted_at"] = item["submitted_at"].isoformat() if hasattr(item["submitted_at"], "isoformat") else str(item["submitted_at"])
+            reports.append(item)
+
+        return {
+            "asset_code": clean_code,
+            "total_reports": len(reports),
+            "reports": reports
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch asset history: {str(e)}")
 
 @app.post("/user/consent", tags=["Authentication"])
 async def record_user_consent(data: UserConsentSubmit, db: AsyncSession = Depends(get_db)):
