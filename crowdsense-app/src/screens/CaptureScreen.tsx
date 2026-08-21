@@ -89,9 +89,17 @@ interface MissionType {
 
 interface CaptureScreenProps {
   onCaptureSuccess?: () => void;
+  initialAssetId?: string;
+  initialCategory?: MissionType;
+  initialLocation?: { latitude: number; longitude: number };
 }
 
-export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps = {}) {
+export default function CaptureScreen({
+  onCaptureSuccess,
+  initialAssetId,
+  initialCategory,
+  initialLocation,
+}: CaptureScreenProps = {}) {
   const { theme } = useTheme();
   const { columns, insets } = useResponsive();
   const [permission, requestPermission] = useCameraPermissions();
@@ -101,12 +109,13 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
 
   // Flow State: Starts directly on camera for fast reporting!
   const [flowState, setFlowState] = useState<FlowState>('camera');
-  const [selectedType, setSelectedType] = useState<MissionType | null>(null);
+  const [selectedType, setSelectedType] = useState<MissionType | null>(initialCategory || null);
+  const [assetId, setAssetId] = useState<string | null>(initialAssetId || null);
 
   // Capture Data
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(initialLocation || null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(initialLocation ? 5.0 : null);
   const [notes, setNotes] = useState('');
 
   // Mandatory Attestation Checkbox
@@ -479,6 +488,7 @@ export default function CaptureScreen({ onCaptureSuccess }: CaptureScreenProps =
         category: selectedType.id,
         latitude: location.latitude,
         longitude: location.longitude,
+        asset_id: assetId || undefined,
       });
 
 
