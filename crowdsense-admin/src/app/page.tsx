@@ -21,7 +21,11 @@ import {
   Sparkles,
   Activity,
   Flame,
-  Info
+  Info,
+  QrCode,
+  Tag,
+  Plus,
+  Printer
 } from 'lucide-react';
 
 
@@ -68,10 +72,22 @@ export default function Home() {
   const [recurrenceModalData, setRecurrenceModalData] = useState<any | null>(null);
   const [deviceTrustScores, setDeviceTrustScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities'>('prioritized');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities' | 'assets'>('prioritized');
   const [flaggedSubmissions, setFlaggedSubmissions] = useState<any[]>([]);
   const [accessibilityAudits, setAccessibilityAudits] = useState<any[]>([]);
   const [utilityStatusList, setUtilityStatusList] = useState<any[]>([]);
+  const [assetsList, setAssetsList] = useState<any[]>([]);
+  const [selectedAssetForQR, setSelectedAssetForQR] = useState<any | null>(null);
+  const [assetHistory, setAssetHistory] = useState<any | null>(null);
+  const [showNewAssetModal, setShowNewAssetModal] = useState(false);
+  const [newAssetForm, setNewAssetForm] = useState({
+    asset_code: '',
+    asset_type: 'streetlight',
+    ward_name: 'Bengaluru East - Ward 12',
+    latitude: 12.9716,
+    longitude: 77.5946,
+    category_preset: 'street_lighting',
+  });
   const [banInput, setBanInput] = useState({ phoneHash: '', reason: '' });
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -547,6 +563,19 @@ export default function Home() {
           >
             <Layers size={15} />
             Utility Outages Ward Status
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
+            onClick={async () => {
+              setActiveTab('assets');
+              try {
+                const res = await fetch(`${API_BASE_URL}/admin/assets`);
+                if (res.ok) setAssetsList(await res.json());
+              } catch (_) {}
+            }}
+          >
+            <QrCode size={15} />
+            Municipal QR Asset Tags
           </button>
         </div>
 
@@ -1319,9 +1348,355 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Municipal Assets & Physical QR Tagging View */}
+            {activeTab === 'assets' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', padding: '16px 20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <QrCode size={18} color="#38bdf8" />
+                      Municipal Physical Asset QR Tags
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0 0' }}>
+                      Generate scannable QR tags for streetlights, waste bins, and bus stops. Citizen scans skip manual location pinning and prefill category.
+                    </p>
+                  </div>
+                  <button
+                    className="action-btn"
+                    style={{ background: '#4f46e5', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => setShowNewAssetModal(true)}
+                  >
+                    <Plus size={16} />
+                    Register New Asset
+                  </button>
+                </div>
+
+                <div className="table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Asset Code</th>
+                        <th>Type</th>
+                        <th>Ward</th>
+                        <th>Coordinates</th>
+                        <th>Preset Category</th>
+                        <th>Linked Reports</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assetsList.map((asset) => (
+                        <tr key={asset.id}>
+                          <td><b><Tag size={12} style={{ display: 'inline', marginRight: 4 }} />{asset.asset_code}</b></td>
+                          <td><span className="mission-pill">{asset.asset_type}</span></td>
+                          <td>{asset.ward_name}</td>
+                          <td><span style={{ fontSize: '11px', color: '#94a3b8' }}>{asset.latitude.toFixed(4)}, {asset.longitude.toFixed(4)}</span></td>
+                          <td><span style={{ fontSize: '12px', color: '#38bdf8' }}>{asset.category_preset}</span></td>
+                          <td>
+                            <button
+                              style={{ background: 'transparent', border: 'none', color: '#6366f1', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_BASE_URL}/admin/assets/${asset.asset_code}/history`);
+                                  if (res.ok) setAssetHistory(await res.json());
+                                } catch (_) {}
+                              }}
+                            >
+                              {asset.report_count || 0} reports
+                            </button>
+                          </td>
+                          <td>
+                            <button
+                              style={{ background: '#334155', color: '#f8fafc', padding: '5px 10px', borderRadius: '6px', border: 'none', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => setSelectedAssetForQR(asset)}
+                            >
+                              <QrCode size={13} />
+                              View QR Sticker
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {assetsList.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                            No municipal assets registered yet. Click &quot;Register New Asset&quot; to generate physical QR tags.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>
+
+      {/* QR Code Printable Sticker Modal */}
+      {selectedAssetForQR && (
+        <div className="modal-overlay" onClick={() => setSelectedAssetForQR(null)}>
+          <div 
+            className="modal-content-container" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', background: '#0f172a', border: '1px solid #334155', borderRadius: '16px', padding: '24px', textAlign: 'center' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
+                Municipal Asset QR Sticker
+              </h3>
+              <button 
+                onClick={() => setSelectedAssetForQR(null)} 
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Printable Physical Sticker Frame */}
+            <div style={{ background: '#ffffff', color: '#0f172a', padding: '20px', borderRadius: '12px', border: '2px dashed #6366f1', margin: '12px 0' }}>
+              <div style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', letterSpacing: '1px' }}>
+                MUNICIPAL INFRASTRUCTURE ASSET
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, margin: '4px 0', letterSpacing: '0.5px' }}>
+                {selectedAssetForQR.asset_code}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '12px' }}>
+                {selectedAssetForQR.asset_type.toUpperCase()} • {selectedAssetForQR.ward_name}
+              </div>
+
+              {/* QR Image Preview */}
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    `https://mapmycity.org/report?asset_id=${selectedAssetForQR.asset_code}&category=${selectedAssetForQR.category_preset}&lat=${selectedAssetForQR.latitude}&lng=${selectedAssetForQR.longitude}`
+                  )}`}
+                  alt="QR Code"
+                  style={{ width: '180px', height: '180px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                />
+              </div>
+
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '8px' }}>
+                Scan to report damage or outage
+              </div>
+              <div style={{ fontSize: '9px', color: '#94a3b8' }}>
+                MapMyCity CrowdSense Civic Network
+              </div>
+            </div>
+
+            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '8px 0 16px 0' }}>
+              Requires physical weather-proof sticker placement by municipal field teams.
+            </p>
+
+            <button
+              onClick={() => window.print()}
+              style={{ background: '#4f46e5', color: '#fff', padding: '10px 20px', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Printer size={16} />
+              Print Asset Tag Sticker
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Asset Report History Modal */}
+      {assetHistory && (
+        <div className="modal-overlay" onClick={() => setAssetHistory(null)}>
+          <div 
+            className="modal-content-container" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '600px', background: '#0f172a', border: '1px solid #334155', borderRadius: '16px', padding: '24px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
+                  Asset Report History — {assetHistory.asset_code}
+                </h3>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  {assetHistory.total_reports} total citizen reports logged against this asset
+                </span>
+              </div>
+              <button 
+                onClick={() => setAssetHistory(null)} 
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {assetHistory.reports.map((rep: any) => (
+                <div key={rep.id} style={{ background: '#1e293b', padding: '12px', borderRadius: '8px', border: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span className="mission-pill" style={{ marginRight: '8px' }}>{rep.mission_type}</span>
+                    <span style={{ fontSize: '12px', color: '#cbd5e1' }}>{rep.notes || 'No description notes'}</span>
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                      Reported: {new Date(rep.submitted_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: rep.status === 'approved' ? '#10b981' : '#f59e0b' }}>
+                    {rep.status?.toUpperCase()}
+                  </span>
+                </div>
+              ))}
+              {assetHistory.reports.length === 0 && (
+                <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '20px' }}>
+                  No reports submitted for this asset tag yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Register New Asset Modal */}
+      {showNewAssetModal && (
+        <div className="modal-overlay" onClick={() => setShowNewAssetModal(false)}>
+          <div 
+            className="modal-content-container" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '460px', background: '#0f172a', border: '1px solid #334155', borderRadius: '16px', padding: '24px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
+                Register Municipal Physical Asset
+              </h3>
+              <button 
+                onClick={() => setShowNewAssetModal(false)} 
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const res = await fetch(`${API_BASE_URL}/admin/assets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newAssetForm),
+                  });
+                  if (res.ok) {
+                    const newAsset = await res.json();
+                    setAssetsList([newAsset, ...assetsList]);
+                    setShowNewAssetModal(false);
+                    setSelectedAssetForQR(newAsset);
+                  }
+                } catch (_) {}
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  Asset Identifier Code (e.g. SL-BLR-5402)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAssetForm.asset_code}
+                  onChange={(e) => setNewAssetForm({ ...newAssetForm, asset_code: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Asset Type
+                  </label>
+                  <select
+                    value={newAssetForm.asset_type}
+                    onChange={(e) => setNewAssetForm({ ...newAssetForm, asset_type: e.target.value })}
+                    style={{ width: '100%', padding: '8px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '12px' }}
+                  >
+                    <option value="streetlight">Streetlight</option>
+                    <option value="waste_bin">Waste Bin</option>
+                    <option value="bus_shelter">Bus Shelter</option>
+                    <option value="storm_drain">Storm Drain</option>
+                    <option value="transformer">Transformer</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Category Preset
+                  </label>
+                  <select
+                    value={newAssetForm.category_preset}
+                    onChange={(e) => setNewAssetForm({ ...newAssetForm, category_preset: e.target.value })}
+                    style={{ width: '100%', padding: '8px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '12px' }}
+                  >
+                    <option value="street_lighting">Street Lighting</option>
+                    <option value="garbage_dump">Garbage</option>
+                    <option value="accessibility">Accessibility</option>
+                    <option value="utility_outage">Utility Outage</option>
+                    <option value="pothole">Road / Pothole</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  Ward / District Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAssetForm.ward_name}
+                  onChange={(e) => setNewAssetForm({ ...newAssetForm, ward_name: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Latitude
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={newAssetForm.latitude}
+                    onChange={(e) => setNewAssetForm({ ...newAssetForm, latitude: parseFloat(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Longitude
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={newAssetForm.longitude}
+                    onChange={(e) => setNewAssetForm({ ...newAssetForm, longitude: parseFloat(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowNewAssetModal(false)}
+                  style={{ background: '#334155', color: '#f8fafc', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ background: '#4f46e5', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Save & Generate QR
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Enlarged Photo Lightbox Modal */}
       {selectedImage && (
