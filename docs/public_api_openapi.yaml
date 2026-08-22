@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+  title: MapMyCity Public Data API
+  version: "1.0"
+  description: |
+    Read-only, anonymised, aggregate civic data for researchers, journalists, and civic-tech developers.
+
+    ## Precondition
+    This API is only enabled once the platform has >= 500 verified submissions across >= 3 wards
+    spanning >= 180 days. Until then all endpoints return **HTTP 503** with a precondition message.
+    See `FUTURE_BACKLOG.md` Part 2 for the gate criteria.
+
+    ## Data guarantees
+    - **Aggregate only**: all responses are counts, averages, and time-bucketed totals.
+    - **Never row-level**: individual submission data is never exposed.
+    - **Never re-identifiable**: no user IDs, device IDs, or location precision finer than ward level.
+
+    ## Rate limits
+    | Tier | Limit |
+    |------|-------|
+    | Unauthenticated | 0 req/s — API key required |
+    | API key holder | 60 req/min · 1 000 req/day |
+
+    Exceeding limits returns **HTTP 429**.
+
+    ## Getting a key
+    Register at `POST /api/v1/public/register-key`. No email verification required —
+    usage is tracked for abuse detection only. Data is genuinely open.
+
+  contact:
+    name: MapMyCity Data Team
+    email: data@mapmycity.in
+  license:
+    name: CC BY 4.0
+    url: https://creativecommons.org/licenses/by/4.0/
+
+servers:
+  - url: https://api.mapmycity.in
+    description: Production
+  - url: http://localhost:8000
+    description: Local development
+
+security:
+  - ApiKeyHeader: []
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+  parameters:
+    period:
+      name: period
+      in: query
+      description: Time window for the query
+      schema:
+        type: string
+        enum: [7d, 30d, 90d, 1y]
+        default: 30d
+    ward_id:
+      name: ward_id
+      in: query
+      description: Filter to a specific ward identifier
+      schema:
+        type: string
+    category:
+      name: category
+      in: query
+      description: Filter to a specific issue category
+      schema:
+        type: string
+        enum: [pothole, garbage, noise, accessibility, infrastructure, passive_road_quality, safety_concern]
+
+  schemas:
+    RegisterKeyRequest:
+      type: object
+      required: [name, email, intended_use]
+      properties:
+        name:
+          type: string
+          example: "Priya Sharma"
+        email:
+          type: string
+          format: email
+          example: "priya@research.edu.in"
+        intended_use:
+          type: string
+          enum: [research, journalism, civic_tech, other]
+
+    RegisterKeyResponse:
+      type: object
+      properties:
+        api_key:
+          type: string
+          example: "mmc_xR3..."
+        message:
+          type: string
+
+    ClusterCountResult:
+      type: object
+      properties:
+        category:
+          type: string
+        ward_id:
+          type: string
+        cluster_count:
+          type: integer
+        report_count:
+          type: integer
+
+    ResolutionStatResult:
+      type: object
+      properties:
+        category:
+          type: string
+        ward_id:
+          type: string
+        resolved_count:
+          type: integer
+        avg_resolution_hours:
+          type: number
+          nullable: true
+        median_resolution_hours:
+          type: number
+          nullable: true
+        sla_met_count:
+          type: integer
+        sla_met_pct:
+          type: number
+          nullable: true
+
+    TimeSeriesResult:
+      type: object
+      properties:
+        bucket:
+          type: string
+          format: date-time
+        category:
+          type: string
+        ward_id:
+          type: string
+        report_count:
+          type: integer
+
+    Error503:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "The public data API is not yet enabled. See FUTURE_BACKLOG.md Part 2 for the precondition."
+
+    Error429:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Rate limit exceeded: 60 req/min."
+
+paths:
+  /api/v1/public/register-key:
+    post:
+      summary: Register an API key
+      description: |
+        Simple, frictionless registration — no email verification. Include the returned
+        `api_key` value as the `X-Api-Key` header on all subsequent requests.
+      security: []
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterKeyRequest'
+            example:
+              name: "Priya Sharma"
+              email: "priya@research.edu.in"
+              intended_use: "research"
+      responses:
+        "200":
+          description: API key issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterKeyResponse'
+        "503":
+          description: API not yet enabled — precondition not met
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error503'
+
+  /api/v1/public/cluster-counts:
+    get:
+      summary: Cluster counts by category and ward
+      description: |
+        Returns the number of issue clusters and individual reports, grouped by
+        category and ward, within the specified time period.
+
+        **Never returns individual rows.** Minimum group size is 5 — groups with
+        fewer than 5 reports are suppressed to prevent re-identification.
+      tags: [Aggregate Data]
+      parameters:
+        - $ref: '#/components/parameters/period'
+        - $ref: '#/components/parameters/ward_id'
+        - $ref: '#/components/parameters/category'
+      responses:
+        "200":
+          description: Cluster count aggregates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                  ward_filter:
+                    type: string
+                    nullable: true
+                  category_filter:
+                    type: string
+                    nullable: true
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClusterCountResult'
+                  note:
+                    type: string
+              example:
+                period: "30d"
+                ward_filter: null
+                category_filter: null
+                results:
+                  - category: "pothole"
+                    ward_id: "ward_12"
+                    cluster_count: 14
+                    report_count: 87
+                  - category: "garbage"
+                    ward_id: "ward_07"
+                    cluster_count: 9
+                    report_count: 43
+                note: "Aggregate data only. No individual submissions or user identifiers are exposed."
+        "401":
+          description: Missing API key
+        "403":
+          description: Invalid API key
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error429'
+        "503":
+          description: API not yet enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error503'
+
+  /api/v1/public/resolution-stats:
+    get:
+      summary: Resolution time statistics by category and ward
+      description: |
+        Returns average and median resolution times, resolved counts, and SLA
+        compliance percentages — aggregated by category and ward.
+
+        Only wards with an active municipal partnership appear in results.
+      tags: [Aggregate Data]
+      parameters:
+        - $ref: '#/components/parameters/period'
+        - $ref: '#/components/parameters/ward_id'
+        - $ref: '#/components/parameters/category'
+      responses:
+        "200":
+          description: Resolution statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResolutionStatResult'
+              example:
+                period: "90d"
+                results:
+                  - category: "pothole"
+                    ward_id: "ward_12"
+                    resolved_count: 52
+                    avg_resolution_hours: 38.4
+                    median_resolution_hours: 31.0
+                    sla_met_count: 44
+                    sla_met_pct: 84.6
+        "401":
+          description: Missing API key
+        "403":
+          description: Invalid API key
+        "429":
+          description: Rate limit exceeded
+        "503":
+          description: API not yet enabled
+
+  /api/v1/public/time-series:
+    get:
+      summary: Report volume over time
+      description: |
+        Time-bucketed report counts — useful for detecting seasonal patterns
+        and spikes (e.g. monsoon waterlogging surges).
+
+        Bucket options: `day`, `week`, `month`.
+      tags: [Aggregate Data]
+      parameters:
+        - $ref: '#/components/parameters/period'
+        - $ref: '#/components/parameters/ward_id'
+        - $ref: '#/components/parameters/category'
+        - name: bucket
+          in: query
+          description: Time bucket size
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: week
+      responses:
+        "200":
+          description: Time-series aggregates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket_size:
+                    type: string
+                  period:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimeSeriesResult'
+              example:
+                bucket_size: "week"
+                period: "1y"
+                results:
+                  - bucket: "2026-06-01T00:00:00"
+                    category: "infrastructure"
+                    ward_id: "ward_12"
+                    report_count: 23
+                  - bucket: "2026-06-08T00:00:00"
+                    category: "infrastructure"
+                    ward_id: "ward_12"
+                    report_count: 41
+        "401":
+          description: Missing API key
+        "403":
+          description: Invalid API key
+        "429":
+          description: Rate limit exceeded
+        "503":
+          description: API not yet enabled
+
+  /api/v1/public/sla-dashboard:
+    get:
+      summary: Per-ward SLA statistics (used by the public SLA dashboard page)
+      description: |
+        Returns per-ward SLA compliance and resolution metrics for all wards
+        where `partner_organisations.is_active = true`. Returns `no_partners: true`
+        if no active partners exist — never returns stats for unpartnered wards.
+      tags: [SLA & Benchmarks]
+      security: []
+      responses:
+        "200":
+          description: SLA data for active partner wards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wards:
+                    type: array
+                  no_partners:
+                    type: boolean
+        "503":
+          description: API not yet enabled
+
+  /api/v1/public/benchmarks:
+    get:
+      summary: Cross-city benchmark data
+      description: |
+        Returns comparison metrics across cities where `is_benchmark_eligible = true`.
+        All volume metrics are normalised per 1,000 population.
+        Returns `insufficient_data: true` if fewer than 2 eligible cities exist.
+
+        **Methodology caveat**: resolution times vary significantly by city budget,
+        density, and population. Normalisation reduces but does not eliminate this bias.
+        The consumer UI renders this caveat prominently.
+      tags: [SLA & Benchmarks]
+      security: []
+      responses:
+        "200":
+          description: Cross-city benchmark data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cities:
+                    type: array
+                  insufficient_data:
+                    type: boolean
+        "503":
+          description: API not yet enabled
+
+tags:
+  - name: Authentication
+    description: API key registration
+  - name: Aggregate Data
+    description: Anonymised, aggregate civic data endpoints
+  - name: SLA & Benchmarks
+    description: Municipal SLA and cross-city comparison data
