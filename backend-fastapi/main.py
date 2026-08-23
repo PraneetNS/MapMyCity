@@ -3032,3 +3032,9 @@ async def suggest_note_improvement_endpoint(data: NoteImprovementRequest):
     return result
 
 
+# ── Include Routers ────────────────────────────────────────────────────────────
+from routers.telemetry import router as telemetry_router
+app.include_router(telemetry_router)
+
+
+
