@@ -1,0 +1,59 @@
+name: MapMyCity CI Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend Tests & Linting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-fastapi
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest httpx psutil
+
+      - name: Run AI Feature Unit Tests
+        run: |
+          python test_ai_features.py
+
+      - name: Run Telemetry & Precondition Gate Tests
+        run: |
+          python test_telemetry_and_exports.py
+
+  frontend-typecheck:
+    name: Mobile & Admin Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: crowdsense-admin/package.json
+
+      - name: Verify Admin Build Readiness
+        working-directory: crowdsense-admin
+        run: |
+          npm ci || npm install
+          npx tsc --noEmit
