@@ -3036,10 +3036,13 @@ async def suggest_note_improvement_endpoint(data: NoteImprovementRequest):
 from routers.telemetry import router as telemetry_router
 from routers.export import router as export_router
 from routers.webhooks import router as webhooks_router
+from routers.surveys import router as surveys_router
 
 app.include_router(telemetry_router)
 app.include_router(export_router)
 app.include_router(webhooks_router)
+app.include_router(surveys_router)
+
 
 
 
