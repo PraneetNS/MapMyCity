@@ -1,4 +1,4 @@
-﻿# FUTURE_BACKLOG.md — Speculative Feature Registry
+# FUTURE_BACKLOG.md — Speculative Feature Registry
 
 > **How to use this file**: Before starting any part below, re-read its precondition and
 > confirm in writing (in the PR description or sprint brief) that the precondition is **actually
@@ -79,8 +79,32 @@
 
 ---
 
+## Part 7 — Citizen Satisfaction Surveys & Contractor Quality Scoring
+
+| Field | Detail |
+|---|---|
+| **Precondition** | At least one full resolution loop in production: a defect cluster reported, actioned by a contractor, and marked resolved — so post-resolution feedback is contextually valid and not floating feedback on open issues. |
+| **Currently met?** | SHIPPED — Infrastructure deployed. `/api/v1/surveys/` endpoint active, `CivicSurveyScreen.tsx` in app, admin analytics page at `/surveys`. Seeded with 3 placeholder mock surveys; feature-flag off until first real resolved clusters accrue. |
+| **Signal to watch** | 50+ resolved clusters with at least 25 confirmed survey responses — then unlock satisfaction dashboard and contractor QA report. |
+| **What was built** | `civic_surveys` DB table (migration 17) + FastAPI router with ward sentiment aggregation + React Native `CivicSurveyScreen` with star ratings, aspect tags, and offline AsyncStorage queue + Next.js `/surveys` analytics page with ward rankings and workmanship scores. |
+| **Risk of building early** | Surveys over unresolved issues collect noise, not signal. |
+
+---
+
+## Part 8 — Municipal Partner Webhook Event Subscriptions
+
+| Field | Detail |
+|---|---|
+| **Precondition** | At least one confirmed municipal IT contact with an HTTP endpoint capable of receiving JSON webhooks, and a signed MoU or LOI authorizing data sharing. |
+| **Currently met?** | SHIPPED — Infrastructure deployed. HMAC-SHA256 signed webhook dispatcher, `partner_webhooks` DB table (migration 17), `/api/v1/webhooks/` CRUD API, admin console at `/webhooks`. No active partner yet; webhook delivery auto-fails silently without a registered endpoint. |
+| **Signal to watch** | A signed data-sharing agreement with one municipal department AND successful test-ping delivery to their endpoint (HTTP 200 logged in `webhook_delivery_logs`). |
+| **What was built** | `webhook_service.py` (HMAC dispatcher + signature verifier) + FastAPI router for register/list/test-ping + `webhook_delivery_logs` table + Next.js admin console page with live registration and connectivity testing. |
+| **Risk of building early** | Without a verified partner endpoint, webhook delivery will always fail; failure counter will climb, masking future real failures. Keep `is_active = false` for all placeholder registrations. |
+
+---
+
 ## Reviewing This Document
 
 This file should be reviewed at the start of every quarterly planning cycle. For each part, run the Signal to watch query/check and update the Currently met? row. Only move a part from backlog to sprint once its precondition row changes to YES.
 
-Last reviewed: 2026-08-22 — all 6 preconditions unmet.
+Last reviewed: 2026-08-25 — Parts 1–6 preconditions unmet; Parts 7 & 8 infrastructure shipped, pending real data/partners.
