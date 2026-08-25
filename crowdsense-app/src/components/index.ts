@@ -11,5 +11,7 @@ export * from './FAQHelpModal';
 export * from './NetworkStatusBar';
 export * from './CampaignBanner';
 export * from './OfflineBanner';
+export * from './CivicBadgeCard';
+
 
 
