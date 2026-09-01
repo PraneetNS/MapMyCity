@@ -16,6 +16,7 @@ The platform features an advanced edge/cloud tiered AI architecture (see [AI_FEA
 - **Civic Note Improvement**: Server-side phrasing suggestions with sliding-window rate limiting.
 - **Community Consensus & Evidence Independence**: Multi-signal scoring engine aggregating independent citizen observations, temporal half-life decay, and dispute queues.
 - **Weather + Civic Intelligence & Predictive Flood Risk**: Explainable statistical engine combining live precipitation, PostGIS historical defect records, chronic hotspots, and route safety checks.
+- **Civic Reputation & Gamification Engine**: Append-only auditable ledger rewarding verified civic value (not raw volume) with anti-gaming idempotency, trust gating, 8-badge multi-tier progression, and strict Trust Score vs Civic Score separation.
 
 ---
 
