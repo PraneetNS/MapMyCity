@@ -12,6 +12,7 @@ export * from './NetworkStatusBar';
 export * from './CampaignBanner';
 export * from './OfflineBanner';
 export * from './CivicBadgeCard';
+export * from './WeatherCivicCard';
 
 
 
