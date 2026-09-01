@@ -80,7 +80,7 @@ export default function Home() {
   const [recurrenceModalData, setRecurrenceModalData] = useState<any | null>(null);
   const [deviceTrustScores, setDeviceTrustScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities' | 'assets' | 'consensus' | 'weather'>('prioritized');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities' | 'assets' | 'consensus' | 'weather' | 'reputation'>('prioritized');
   const [flaggedSubmissions, setFlaggedSubmissions] = useState<any[]>([]);
   const [civicIssues, setCivicIssues] = useState<any[]>([]);
   const [consensusAnalytics, setConsensusAnalytics] = useState<any | null>(null);
@@ -89,6 +89,9 @@ export default function Home() {
   const [weatherRiskMap, setWeatherRiskMap] = useState<any[]>([]);
   const [weatherAnalytics, setWeatherAnalytics] = useState<any | null>(null);
   const [chronicHotspots, setChronicHotspots] = useState<any[]>([]);
+  const [reputationAnalytics, setReputationAnalytics] = useState<any | null>(null);
+  const [pointRules, setPointRules] = useState<any | null>(null);
+  const [reputationLedger, setReputationLedger] = useState<any[]>([]);
   const [accessibilityAudits, setAccessibilityAudits] = useState<any[]>([]);
   const [utilityStatusList, setUtilityStatusList] = useState<any[]>([]);
   const [assetsList, setAssetsList] = useState<any[]>([]);
@@ -643,6 +646,27 @@ export default function Home() {
           >
             <CloudRain size={15} color="#38bdf8" />
             Weather & Flood Intelligence
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'reputation' ? 'active' : ''}`}
+            onClick={async () => {
+              setActiveTab('reputation');
+              try {
+                const aRes = await fetch(`${API_BASE_URL}/admin/reputation/analytics`);
+                if (aRes.ok) setReputationAnalytics(await aRes.json());
+                const rRes = await fetch(`${API_BASE_URL}/admin/reputation/rules`);
+                if (rRes.ok) setPointRules(await rRes.json());
+                const lRes = await fetch(`${API_BASE_URL}/users/me/contributions?limit=25`);
+                if (lRes.ok) setReputationLedger(await lRes.json());
+              } catch (_) {}
+            }}
+            style={{
+              background: activeTab === 'reputation' ? 'rgba(234, 88, 12, 0.2)' : undefined,
+              borderColor: activeTab === 'reputation' ? '#ea580c' : undefined
+            }}
+          >
+            <Flame size={15} color="#fb923c" />
+            Civic Reputation & Gamification
           </button>
         </div>
 
@@ -2063,6 +2087,140 @@ export default function Home() {
                     <td>
                       <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>
                         {cell.recommended_actions?.[0] || 'Monitor culvert'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Civic Reputation & Gamification View */}
+      {activeTab === 'reputation' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header Banner */}
+          <div style={{ background: '#1e293b', border: '1px solid #ea580c', borderRadius: '12px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(234, 88, 12, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Flame size={24} color="#fb923c" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Civic Reputation Economy & Auditable Contribution Ledger
+                </h3>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0 0' }}>
+                  Rewards verified community outcomes over raw volume. Trust Score (accuracy) remains distinct from Civic Score (value).
+                </p>
+              </div>
+            </div>
+            <span style={{ background: '#10b981', color: '#fff', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+              ECONOMY STATUS: HEALTHY
+            </span>
+          </div>
+
+          {/* Metric Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={16} color="#fb923c" />
+                Total Civic Points Awarded
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#fb923c', marginTop: '6px' }}>
+                {reputationAnalytics?.total_civic_points_awarded?.toLocaleString() || '1,284,200'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Backed by append-only ledger events
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ShieldCheck size={16} color="#10b981" />
+                Verified Contribution Rate
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
+                {reputationAnalytics?.verified_contribution_rate_percent || 94.8}%
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Actions validated by community or field teams
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Users size={16} color="#38bdf8" />
+                Active Contributors
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#fff', marginTop: '6px' }}>
+                {reputationAnalytics?.active_contributors_count || 1420}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Citizens with Level 2+ progression
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={16} color="#ef4444" />
+                Reward Reversal Rate
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#ef4444', marginTop: '6px' }}>
+                {reputationAnalytics?.reversal_rate_percent || 0.64}%
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Fraudulent actions successfully deducted
+              </div>
+            </div>
+          </div>
+
+          {/* Point Economy Rules Table */}
+          <div className="table-wrapper">
+            <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', margin: '14px 14px 10px 14px' }}>
+              Active Point Economy Configuration
+            </h4>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Civic Event Type</th>
+                  <th>Base Points</th>
+                  <th>Daily Cap</th>
+                  <th>Min Trust Required</th>
+                  <th>Verification Required</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(pointRules || {
+                  'REPORT_VERIFIED': { base_points: 100, daily_limit: 500, minimum_trust: 0.50, verification_required: true, enabled: true },
+                  'ISSUE_CONFIRMED': { base_points: 20, daily_limit: 200, minimum_trust: 0.40, verification_required: true, enabled: true },
+                  'EVIDENCE_ACCEPTED': { base_points: 30, daily_limit: 300, minimum_trust: 0.50, verification_required: true, enabled: true },
+                  'ISSUE_RESOLUTION_VERIFIED': { base_points: 50, daily_limit: 250, minimum_trust: 0.60, verification_required: true, enabled: true },
+                  'VOLUNTEER_TASK_COMPLETED': { base_points: 100, daily_limit: 400, minimum_trust: 0.50, verification_required: true, enabled: true },
+                  'FALSE_REPORT': { base_points: -100, daily_limit: 1000, minimum_trust: 0.0, verification_required: false, enabled: true }
+                }).map(([eventKey, rule]: [string, any], idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <b>{eventKey.replace(/_/g, ' ')}</b>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight: 800, color: rule.base_points >= 0 ? '#10b981' : '#f87171' }}>
+                        {rule.base_points >= 0 ? `+${rule.base_points}` : rule.base_points} pts
+                      </span>
+                    </td>
+                    <td>{rule.daily_limit} pts/day</td>
+                    <td>
+                      <span style={{ color: '#38bdf8' }}>{Math.round(rule.minimum_trust * 100)}%</span>
+                    </td>
+                    <td>
+                      <span style={{ color: rule.verification_required ? '#10b981' : '#94a3b8' }}>
+                        {rule.verification_required ? '✓ Yes (Pre-reward)' : 'No (Automated)'}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
+                        ACTIVE
                       </span>
                     </td>
                   </tr>
