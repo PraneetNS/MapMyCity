@@ -204,31 +204,34 @@ export default function SubmissionsScreen() {
         />
       }
       ListHeaderComponent={
-        digest ? (
-          <Card style={{ backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF', borderColor: '#818CF8', borderWidth: 1, padding: 14, marginBottom: 12, gap: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Sparkles size={16} color="#6366F1" />
-                <Text style={{ fontSize: 13, fontWeight: 'bold', color: isDark ? '#C7D2FE' : '#4338CA' }}>
-                  Smart Activity Digest
+        <View style={{ gap: 8, marginBottom: 8 }}>
+          <WeatherCivicCard />
+          {digest && (
+            <Card style={{ backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF', borderColor: '#818CF8', borderWidth: 1, padding: 14, marginHorizontal: 16, marginBottom: 4, gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={16} color="#6366F1" />
+                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: isDark ? '#C7D2FE' : '#4338CA' }}>
+                    Smart Activity Digest
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: isDark ? '#A5B4FC' : '#6366F1', fontWeight: '600' }}>
+                  {digest.ward_name}
                 </Text>
               </View>
-              <Text style={{ fontSize: 11, color: isDark ? '#A5B4FC' : '#6366F1', fontWeight: '600' }}>
-                {digest.ward_name}
+              <Text style={{ fontSize: 13, color: isDark ? '#E0E7FF' : '#312E81', lineHeight: 18, fontWeight: '500' }}>
+                {digest.summary_text}
               </Text>
-            </View>
-            <Text style={{ fontSize: 13, color: isDark ? '#E0E7FF' : '#312E81', lineHeight: 18, fontWeight: '500' }}>
-              {digest.summary_text}
-            </Text>
-            {digest.badge_msg && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                <Text style={{ fontSize: 11, color: isDark ? '#818CF8' : '#4F46E5', fontWeight: '700' }}>
-                  🏆 {digest.badge_msg}
-                </Text>
-              </View>
-            )}
-          </Card>
-        ) : null
+              {digest.badge_msg && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <Text style={{ fontSize: 11, color: isDark ? '#818CF8' : '#4F46E5', fontWeight: '700' }}>
+                    🏆 {digest.badge_msg}
+                  </Text>
+                </View>
+              )}
+            </Card>
+          )}
+        </View>
       }
       renderItem={({ item }) => (
         <Card style={styles.card}>
