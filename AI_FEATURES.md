@@ -87,6 +87,16 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
   5. Contradictory negative signal penalties (`NOT_PRESENT` / active `FIXED`)
 - **Resolution Dispute Detection**: When an issue is marked resolved, subsequent citizen `STILL_EXISTS` confirmations trigger automated dispute flags and reopen the issue for verification.
 
+### Part 8 — Weather + Civic Intelligence & Predictive Flood Risk
+- **Civic Problem**: Weather forecasts alone do not tell city managers or citizens *which specific streets and underpasses* will fail during rainfall.
+- **Explainable Multi-Layer Correlation**:
+  1. Live Open-Meteo precipitation forecast (volume and hourly peak intensity).
+  2. PostGIS spatial historical defect records (past waterlogging and open drainage bottlenecks).
+  3. Dynamic location-specific critical rainfall thresholds (18–25mm for chronic low points).
+  4. Explainable composite risk formula ($0.0 \to 1.0$) with discrete levels (`LOW`, `MEDIUM`, `HIGH`, `EXTREME`).
+  5. AI-generated municipal preventive action recommendations (pump pre-positioning, culvert desilting, traffic diversions).
+  6. Citizen Route Risk checking overlay simulating travel path crossings with chronic flood hotspots.
+
 ---
 
 ## 5. Security, Privacy & DPDP Act 2023 Compliance

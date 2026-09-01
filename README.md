@@ -15,6 +15,7 @@ The platform features an advanced edge/cloud tiered AI architecture (see [AI_FEA
 - **Scoped FAQ Help Assistant**: Retrieval-based semantic guide matcher with zero hallucination and support fallback.
 - **Civic Note Improvement**: Server-side phrasing suggestions with sliding-window rate limiting.
 - **Community Consensus & Evidence Independence**: Multi-signal scoring engine aggregating independent citizen observations, temporal half-life decay, and dispute queues.
+- **Weather + Civic Intelligence & Predictive Flood Risk**: Explainable statistical engine combining live precipitation, PostGIS historical defect records, chronic hotspots, and route safety checks.
 
 ---
 
