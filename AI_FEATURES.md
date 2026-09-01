@@ -15,6 +15,7 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 | **5. Smart Activity Digest** | Server-side / Client | Deterministic Templated Natural Language | **Zero ($0.00)** | Weekly per active user | No (Engagement) |
 | **6. Scoped FAQ Help Assistant** | On-Device / Client | Retrieval-Based Vector / Keyword Matching | **Zero ($0.00)** | On-demand in Help section | No (Support Deflection) |
 | **7. Note Improvement Suggestion** | Server-side | Civic Domain Prompt / Phrasing Map | Low (Rate limited: max 10/hr/user) | Optional (Citizen taps "Improve") | Yes (Report Clarity) |
+| **8. Community Consensus & Independence Scoring** | Server-side | Explainable Multi-Signal Recency Half-Life Model | **Zero ($0.00)** (Deterministic) | On confirmation / evidence intake | 🌟 **Yes (Core B2G)** |
 
 ---
 
@@ -76,7 +77,15 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 ### Part 6 — Scoped FAQ Help Assistant
 - **Retrieval-Based Architecture**: Implemented in `crowdsense-app/src/services/faqAssistant.ts`.
 - **Curated Knowledge Base**: Pre-loaded with verified answers regarding clustering algorithms, DPDP Act 2023 compliance, offline syncing, and trust scores.
-- **Zero Hallucination Fallback**: If query similarity is below confidence threshold ($< 0.35$), gracefully falls back to the **Contact Support / Grievance Officer** flow rather than generating ungrounded advice.
+### Part 7 — Community Consensus & Evidence Independence Scoring
+- **Municipal Problem**: Citizen issue reporting often suffers from either duplicate fatigue or single-user button spamming, making it difficult for city managers to discern actual severity and whether a defect is still present.
+- **Explainable Multi-Signal Engine**: Computes canonical issue confidence ($0.0 \to 1.0$) combining:
+  1. Independent reporter count (logarithmic saturation)
+  2. Independent device confirmations with diminishing marginal returns per hardware ID
+  3. Exponential recency decay with a 14-day half-life: $w(t) = \exp(-\frac{\ln 2}{14} \cdot \Delta t_{\text{days}})$
+  4. Photo and accelerometer sensor corroboration
+  5. Contradictory negative signal penalties (`NOT_PRESENT` / active `FIXED`)
+- **Resolution Dispute Detection**: When an issue is marked resolved, subsequent citizen `STILL_EXISTS` confirmations trigger automated dispute flags and reopen the issue for verification.
 
 ---
 
