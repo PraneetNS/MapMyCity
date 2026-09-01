@@ -16,6 +16,8 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 | **6. Scoped FAQ Help Assistant** | On-Device / Client | Retrieval-Based Vector / Keyword Matching | **Zero ($0.00)** | On-demand in Help section | No (Support Deflection) |
 | **7. Note Improvement Suggestion** | Server-side | Civic Domain Prompt / Phrasing Map | Low (Rate limited: max 10/hr/user) | Optional (Citizen taps "Improve") | Yes (Report Clarity) |
 | **8. Community Consensus & Independence Scoring** | Server-side | Explainable Multi-Signal Recency Half-Life Model | **Zero ($0.00)** (Deterministic) | On confirmation / evidence intake | 🌟 **Yes (Core B2G)** |
+| **9. Weather + Civic Flood Risk Engine** | Server-side | Open-Meteo + PostGIS Spatial Correlation | **Zero ($0.00)** (Free API + SQL) | Hourly forecast refresh, On-demand | 🌟 **Yes (Core B2G)** |
+| **10. Civic Reputation & Gamification Engine** | Server-side | Append-only Ledger + Anti-Gaming Rules Engine | **Zero ($0.00)** (Deterministic SQL) | On verified civic event | 🌟 **Yes (Citizen Retention)** |
 
 ---
 
@@ -104,3 +106,30 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 - **No PII Sent to External AI**: User identifiers, phone hashes, and exact home coordinates are stripped before any server AI or summary task.
 - **Women's Safety Reports**: Anonymized at capture time; excluded from external indexing.
 - **Local-First Processing**: Image quality checks, NSFW filtering, and category validation execute 100% on-device before any network transmission.
+
+---
+
+## Part 9 — Civic Reputation, Contribution Score & Gamification System
+
+- **Municipal Problem**: Citizens submit reports but receive no feedback on their real-world impact, leading to disengagement and declining long-term platform retention.
+- **Core Design Principle** — Strict Score Separation:
+  - **Trust Score** (`0.0 → 1.0`): Reflects submission *accuracy and reliability* (EXIF validity, pHash deduplication, moderation history). Existing system, unchanged.
+  - **Civic Contribution Score** (`Integer Points + Level 1–8`): Reflects *verified civic value created* (confirmed pothole fixes, resolved water outages, accepted photo evidence). Entirely new system.
+  - A user can have high trust with low contribution (accurate but rare submitter) or high contribution with moderate trust (active verified volunteer). These scores must never be merged or substituted.
+- **How It Works**:
+  - All point events are recorded in an **append-only `civic_contribution_events` ledger** — points are never mutated directly.
+  - Idempotency key (`event_type:ref_type:ref_id:user_id`) prevents double-rewarding the same verified action.
+  - Daily caps (500 pts/day) and trust gating (≥ 0.50 minimum trust) prevent gaming.
+  - Reversals (`POINT_REVERSAL`) and admin corrections (`ADMIN_ADJUSTMENT`) are recorded as new ledger entries preserving full audit history.
+  - 8-badge registry with Bronze → Silver → Gold tier progression unlocked by category-specific verified action thresholds.
+- **Point Economy** (configurable via `contribution_point_rules` table):
+  - `REPORT_VERIFIED` → +100 pts
+  - `ISSUE_CONFIRMED` → +20 pts (community corroboration)
+  - `EVIDENCE_ACCEPTED` → +30 pts (photo evidence validated)
+  - `ISSUE_RESOLUTION_VERIFIED` → +50 pts (closed issue confirmed resolved)
+  - `VOLUNTEER_TASK_COMPLETED` → +100 pts (NGO mission)
+  - `SURVEY_COMPLETED` → +10 pts
+  - `FALSE_REPORT` → −100 pts (anti-gaming)
+- **Compute Profile**: Zero external AI cost. Entirely deterministic SQL + Python rules engine.
+- **Admin Governance**: Dedicated dashboard tab with economy health KPIs, point rules configuration table, and auditable reward reversal tooling.
+- **Citizen UX**: Full `CivicProfileScreen` with Trust vs Civic score cards, badge showcase, real-world impact milestones, and filterable ledger history.
