@@ -45,6 +45,7 @@ import {
 import { SocialImpactShareModal } from '../components/SocialImpactShareModal';
 import { FAQHelpModal } from '../components/FAQHelpModal';
 import { ImpactCardData } from '../services/impactCardGenerator';
+import CivicProfileScreen from './CivicProfileScreen';
 
 interface ProfileSettingsScreenProps {
   onOpenLegalSettings: () => void;
@@ -65,6 +66,7 @@ export default function ProfileSettingsScreen({
   const [showFAQModal, setShowFAQModal] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showCivicProfileModal, setShowCivicProfileModal] = useState(false);
   const [shareData, setShareData] = useState<ImpactCardData | null>(null);
 
   // Offline maps state
@@ -233,6 +235,17 @@ export default function ProfileSettingsScreen({
           <Share2 size={16} color="#4F46E5" />
           <Text style={styles.shareImpactBtnText}>Share Monthly Civic Impact Story</Text>
         </Pressable>
+
+        {/* View Full Civic Reputation & Badges Action */}
+        <Pressable
+          onPress={() => setShowCivicProfileModal(true)}
+          style={[styles.shareImpactBtn, { backgroundColor: '#EFF6FF', borderColor: '#3B82F6', marginTop: 8 }]}
+        >
+          <Award size={16} color="#2563EB" />
+          <Text style={[styles.shareImpactBtnText, { color: '#2563EB' }]}>
+            View Civic Reputation, Score & Badges
+          </Text>
+        </Pressable>
       </View>
 
       {/* Performance, Network & Storage Management */}
@@ -371,7 +384,17 @@ export default function ProfileSettingsScreen({
         <Text style={styles.logoutText}>Log Out Account</Text>
       </Pressable>
 
-      <FAQHelpModal visible={showFAQModal} onClose={() => setShowFAQModal(false)} />
+      {/* FAQ Help Assistant Modal */}
+      <FAQHelpModal
+        visible={showFAQModal}
+        onClose={() => setShowFAQModal(false)}
+      />
+
+      {/* Full Civic Profile Modal */}
+      <Modal visible={showCivicProfileModal} animationType="slide">
+        <CivicProfileScreen onBack={() => setShowCivicProfileModal(false)} />
+      </Modal>
+
       <SocialImpactShareModal
         visible={showShareModal}
         data={shareData}
