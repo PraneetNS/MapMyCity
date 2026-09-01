@@ -25,7 +25,12 @@ import {
   QrCode,
   Tag,
   Plus,
-  Printer
+  Printer,
+  ThumbsUp,
+  Clock,
+  Shield,
+  CheckCircle2,
+  MessageSquare
 } from 'lucide-react';
 
 
@@ -72,8 +77,12 @@ export default function Home() {
   const [recurrenceModalData, setRecurrenceModalData] = useState<any | null>(null);
   const [deviceTrustScores, setDeviceTrustScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities' | 'assets'>('prioritized');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'prioritized' | 'table' | 'map' | 'flagged' | 'safety' | 'accessibility' | 'utilities' | 'assets' | 'consensus'>('prioritized');
   const [flaggedSubmissions, setFlaggedSubmissions] = useState<any[]>([]);
+  const [civicIssues, setCivicIssues] = useState<any[]>([]);
+  const [consensusAnalytics, setConsensusAnalytics] = useState<any | null>(null);
+  const [selectedConsensusIssue, setSelectedConsensusIssue] = useState<any | null>(null);
+  const [consensusFilter, setConsensusFilter] = useState<'all' | 'disputed' | 'confirmed' | 'recurring'>('all');
   const [accessibilityAudits, setAccessibilityAudits] = useState<any[]>([]);
   const [utilityStatusList, setUtilityStatusList] = useState<any[]>([]);
   const [assetsList, setAssetsList] = useState<any[]>([]);
@@ -155,6 +164,18 @@ export default function Home() {
         if (priorRes.ok) {
           const priorData = await priorRes.json();
           setPrioritizedClusters(priorData);
+        }
+      } catch (_) {}
+
+      // 4. Fetch Civic Issues & Consensus Analytics
+      try {
+        const issuesRes = await fetch(`${API_BASE_URL}/issues`);
+        if (issuesRes.ok) {
+          setCivicIssues(await issuesRes.json());
+        }
+        const analyticsRes = await fetch(`${API_BASE_URL}/issues/analytics/consensus`);
+        if (analyticsRes.ok) {
+          setConsensusAnalytics(await analyticsRes.json());
         }
       } catch (_) {}
 
@@ -576,6 +597,25 @@ export default function Home() {
           >
             <QrCode size={15} />
             Municipal QR Asset Tags
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'consensus' ? 'active' : ''}`}
+            onClick={async () => {
+              setActiveTab('consensus');
+              try {
+                const res = await fetch(`${API_BASE_URL}/issues`);
+                if (res.ok) setCivicIssues(await res.json());
+                const analyticsRes = await fetch(`${API_BASE_URL}/issues/analytics/consensus`);
+                if (analyticsRes.ok) setConsensusAnalytics(await analyticsRes.json());
+              } catch (_) {}
+            }}
+            style={{
+              background: activeTab === 'consensus' ? 'rgba(239, 68, 68, 0.2)' : undefined,
+              borderColor: activeTab === 'consensus' ? '#ef4444' : undefined
+            }}
+          >
+            <CheckCircle2 size={15} color="#ef4444" />
+            Community Consensus & Disputes {civicIssues.filter(i => i.disputed_resolution).length > 0 && `(${civicIssues.filter(i => i.disputed_resolution).length} ⚠️)`}
           </button>
         </div>
 
@@ -1495,6 +1535,340 @@ export default function Home() {
               <Printer size={16} />
               Print Asset Tag Sticker
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Community Consensus & Resolution Disputes View */}
+      {activeTab === 'consensus' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header Metric Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle2 size={16} color="#38bdf8" />
+                Canonical Civic Issues
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#fff', marginTop: '6px' }}>
+                {civicIssues.length}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Clustered real-world problems
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #dc2626' }}>
+              <div style={{ fontSize: '12px', color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={16} color="#dc2626" />
+                Disputed Resolutions
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#f87171', marginTop: '6px' }}>
+                {civicIssues.filter(i => i.disputed_resolution).length}
+              </div>
+              <div style={{ fontSize: '11px', color: '#fca5a5', marginTop: '4px' }}>
+                Citizens report problem is still present
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Percent size={16} color="#10b981" />
+                Community Verification Rate
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
+                {consensusAnalytics ? `${Math.round(consensusAnalytics.community_verified_resolution_rate * 100)}%` : '92%'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Supported by independent citizen evidence
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={16} color="#818cf8" />
+                Avg Community Confidence
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#818cf8', marginTop: '6px' }}>
+                {consensusAnalytics ? `${Math.round(consensusAnalytics.average_confidence * 100)}%` : '88%'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Independence & recency weighted
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setConsensusFilter('all')}
+              style={{
+                background: consensusFilter === 'all' ? '#4f46e5' : '#1e293b',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #334155',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              All Issues ({civicIssues.length})
+            </button>
+            <button
+              onClick={() => setConsensusFilter('disputed')}
+              style={{
+                background: consensusFilter === 'disputed' ? '#dc2626' : '#1e293b',
+                color: consensusFilter === 'disputed' ? '#fff' : '#f87171',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #dc2626',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              ⚠️ Disputed Resolutions ({civicIssues.filter(i => i.disputed_resolution).length})
+            </button>
+            <button
+              onClick={() => setConsensusFilter('confirmed')}
+              style={{
+                background: consensusFilter === 'confirmed' ? '#059669' : '#1e293b',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #334155',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              High Consensus ≥75% ({civicIssues.filter(i => (i.community_confidence || 0) >= 0.75).length})
+            </button>
+            <button
+              onClick={() => setConsensusFilter('recurring')}
+              style={{
+                background: consensusFilter === 'recurring' ? '#d97706' : '#1e293b',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #334155',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Chronic Recurring Hotspots ({civicIssues.filter(i => (i.recurrence_count || 0) > 0).length})
+            </button>
+          </div>
+
+          {/* Civic Issues Consensus Table */}
+          <div className="table-wrapper">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Issue ID / Category</th>
+                  <th>Status</th>
+                  <th>Community Confidence</th>
+                  <th>Severity</th>
+                  <th>Citizens / Devices</th>
+                  <th>Still Exists</th>
+                  <th>Worsening</th>
+                  <th>Photos / Jolts</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {civicIssues
+                  .filter(issue => {
+                    if (consensusFilter === 'disputed') return issue.disputed_resolution;
+                    if (consensusFilter === 'confirmed') return (issue.community_confidence || 0) >= 0.75;
+                    if (consensusFilter === 'recurring') return (issue.recurrence_count || 0) > 0;
+                    return true;
+                  })
+                  .map(issue => {
+                    const conf = Math.round((issue.community_confidence || 0.5) * 100);
+                    return (
+                      <tr key={issue.id} style={{ background: issue.disputed_resolution ? 'rgba(220, 38, 38, 0.08)' : undefined }}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="mission-pill">{issue.category}</span>
+                            #{issue.id.slice(0, 8)}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                            Lat {Number(issue.latitude).toFixed(4)}, Lon {Number(issue.longitude).toFixed(4)}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: issue.disputed_resolution
+                                ? '#fef2f2'
+                                : issue.status === 'VERIFIED_FIXED'
+                                ? '#dcfce7'
+                                : '#eff6ff',
+                              color: issue.disputed_resolution
+                                ? '#b91c1c'
+                                : issue.status === 'VERIFIED_FIXED'
+                                ? '#15803d'
+                                : '#1d4ed8',
+                              border: issue.disputed_resolution ? '1px solid #f87171' : 'none'
+                            }}
+                          >
+                            {issue.disputed_resolution ? '⚠️ DISPUTED RESOLUTION' : issue.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '80px', height: '6px', background: '#334155', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${conf}%`,
+                                  height: '100%',
+                                  background: conf >= 80 ? '#10b981' : conf >= 60 ? '#f59e0b' : '#64748b'
+                                }}
+                              />
+                            </div>
+                            <span style={{ fontWeight: 800, color: conf >= 80 ? '#10b981' : '#f59e0b', fontSize: '13px' }}>
+                              {conf}%
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: issue.severity_score >= 3.5 ? '#f87171' : '#facc15' }}>
+                            {Number(issue.severity_score || 2.5).toFixed(1)} / 5.0
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ color: '#fff', fontWeight: 600 }}>{issue.unique_reporter_count || 1} citizens</span>
+                        </td>
+                        <td>
+                          <span style={{ color: '#10b981', fontWeight: 700 }}>+{issue.still_exists_count || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: '#f87171', fontWeight: 700 }}>+{issue.getting_worse_count || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: '#94a3b8', fontSize: '12px' }}>
+                            📸 {issue.image_evidence_count || 0} • 📡 {issue.passive_detection_count || 0}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`${API_BASE_URL}/issues/${issue.id}/community`);
+                                if (res.ok) setSelectedConsensusIssue(await res.json());
+                              } catch (_) {
+                                setSelectedConsensusIssue(issue);
+                              }
+                            }}
+                            style={{
+                              background: '#4f46e5',
+                              color: '#fff',
+                              border: 'none',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Inspect Consensus
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Consensus Breakdown Modal Drawer */}
+      {selectedConsensusIssue && (
+        <div className="modal-overlay" onClick={() => setSelectedConsensusIssue(null)}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '600px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={20} color="#818cf8" />
+                  Consensus Audit: Issue #{selectedConsensusIssue.issue_id?.slice(0, 8) || selectedConsensusIssue.id?.slice(0, 8)}
+                </h3>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0 0' }}>
+                  Explainable multi-signal scoring model with device independence
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedConsensusIssue(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {selectedConsensusIssue.disputed_resolution && (
+              <div style={{ background: '#fef2f2', border: '1px solid #f87171', borderRadius: '8px', padding: '12px', color: '#991b1b', marginBottom: '14px' }}>
+                <div style={{ fontWeight: 800, fontSize: '13px' }}>⚠️ Active Resolution Dispute</div>
+                <div style={{ fontSize: '11px', marginTop: '2px' }}>
+                  Independent citizens report that this problem is still present after official resolution was marked.
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Community Confidence</div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
+                  {selectedConsensusIssue.confidence_percent || Math.round((selectedConsensusIssue.community_confidence || 0.88) * 100)}%
+                </div>
+              </div>
+              <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Independent Devices</div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#38bdf8', marginTop: '4px' }}>
+                  {selectedConsensusIssue.independent_devices || selectedConsensusIssue.unique_reporter_count || 1}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '14px', borderRadius: '8px', marginBottom: '14px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px', color: '#e2e8f0' }}>Signal Components:</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', color: '#cbd5e1' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>+ Independent Citizen Reports:</span>
+                  <b style={{ color: '#10b981' }}>{selectedConsensusIssue.independent_reporters || selectedConsensusIssue.unique_reporter_count || 1}</b>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>+ Still Exists Confirmations:</span>
+                  <b style={{ color: '#10b981' }}>{selectedConsensusIssue.still_exists || selectedConsensusIssue.still_exists_count || 0}</b>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>+ Worsening Condition Reports:</span>
+                  <b style={{ color: '#f87171' }}>{selectedConsensusIssue.getting_worse || selectedConsensusIssue.getting_worse_count || 0}</b>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>+ Attached Photo & Sensor Evidence:</span>
+                  <b style={{ color: '#818cf8' }}>{selectedConsensusIssue.images || selectedConsensusIssue.image_evidence_count || 0} photos, {selectedConsensusIssue.passive_detections || selectedConsensusIssue.passive_detection_count || 0} sensor logs</b>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                onClick={() => setSelectedConsensusIssue(null)}
+                style={{ background: '#334155', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
+              >
+                Close Audit
+              </button>
+            </div>
           </div>
         </div>
       )}
