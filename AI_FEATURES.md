@@ -133,3 +133,34 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 - **Compute Profile**: Zero external AI cost. Entirely deterministic SQL + Python rules engine.
 - **Admin Governance**: Dedicated dashboard tab with economy health KPIs, point rules configuration table, and auditable reward reversal tooling.
 - **Citizen UX**: Full `CivicProfileScreen` with Trust vs Civic score cards, badge showcase, real-world impact milestones, and filterable ledger history.
+
+---
+
+## Part 10 — Autonomous Municipal Dispatch & SLA Escalation Watchdog
+
+- **Municipal Problem**: Citizen defect reports accumulate in static dashboards without proactive contractor assignment, causing severe SLA breaches and delayed street repairs.
+- **Rule-Based Autonomous Triage**:
+  - Automatically matches defect categories (potholes, drainage clogs, streetlights, solid waste) to registered municipal departments (`ROADS`, `DRAIN`, `ELEC`, `SWM`).
+  - Evaluates defect severity, crowd consensus count, and active weather alerts to compute dispatch priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `EMERGENCY`).
+  - Automatically calculates department SLA deadlines (e.g., 12h emergency vs 48h standard).
+  - Assigns ward-level contractors and generates traceable work orders (`WO-YYYYMMDD-XXXX`).
+- **SLA Watchdog & Auto-Escalation**:
+  - Continuous background evaluation detects orders nearing expiration (<25% duration remaining) and triggers warning alerts.
+  - Overdue breaches automatically elevate tickets to Zonal Chief Engineers (Tier 1–3) with full audit event logging.
+- **Contractor & Field Worker Mobile UX**:
+  - Offline-first `WorkOrdersScreen` and `workOrderSync` service allow field crews to view tickets, update status (`IN_PROGRESS`, `RESOLVED`), and attach resolution proof photos even in underground/low-connectivity areas.
+
+---
+
+## Part 11 — Road Surface Health Index (RHI) & International Roughness Index (IRI) Engine
+
+- **Civic Problem**: Traditional road survey vehicles (laser profilometers) cost millions and take months, leaving city engineers with outdated street condition data.
+- **Crowdsourced Inertial Telemetry**:
+  - Captures passive 3-axis accelerometer vertical jolts ($a_z$) and GPS speed from moving citizen vehicles.
+  - Calculates the International Roughness Index (IRI in m/km) using ASTM E1926 quarter-car RMS vibration approximations.
+  - Transforms IRI into an intuitive $0 \to 100$ Road Surface Health Index (RHI), categorizing pavement into `GOOD`, `FAIR`, `POOR`, or `CRITICAL_SURFACE_FAILURE`.
+- **Repaving Priority Optimization**:
+  - Computes a weighted resurfacing urgency score combining surface degradation (50%), active pothole cluster density (30%), and arterial traffic factors (20%).
+- **GIS Export & Integration**:
+  - Automated KML and GeoJSON exporters (`scripts/export_road_health_kml.py`) generate color-coded street network maps compatible with Google Earth, QGIS, and ArcGIS.
+

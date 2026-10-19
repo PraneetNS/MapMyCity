@@ -159,6 +159,24 @@ A Next.js 14 dashboard ([`page.tsx`](file:///d:/MapMyCity/crowdsense-admin/src/a
   - ⚪ **Stale Cluster**: Slate grey.
 * **Metric Computations**: Computes running stats including total active submissions, approval rates, pending queue counts, active device logs, and system health checks.
 * **Moderation Panel**: Provides table filters (by category, anomalies, or flags) where admins can review user-submitted photos side-by-side with device trust scores, and either **approve** or **reject** submissions instantly.
+* **Autonomous Dispatch & Work Orders Console** (`/dispatch`): Real-time SLA countdowns, rule-based department routing, contractor triage queue, and escalation alerts.
+
+---
+
+## 🏛️ Autonomous Municipal Dispatch & Road Health Intelligence
+
+### 1. Autonomous Work Order Routing & SLA Escalation
+* **Rule-Based Routing**: Maps defect categories directly to responsible civic departments (`dept_roads`, `dept_drainage`, `dept_electrical`, `dept_sanitation`).
+* **SLA Calculation**: Computes turnaround deadlines based on severity, crowd confirmation count, and active monsoon/storm hazards (12h emergency vs 48h standard).
+* **SLA Watchdog Daemon**: Continuous background evaluation detects at-risk tickets (<25% duration) and automatically escalates overdue breaches to Zonal Chief Engineers.
+* **Field Operator Offline Mode**: Mobile `WorkOrdersScreen` allows contractors to accept tickets, update status (`IN_PROGRESS`, `RESOLVED`), and attach photo proofs with automatic offline queueing.
+
+### 2. Road Surface Health Index (RHI) & IRI Roughness
+* **Vehicle Inertial Telemetry**: Ingests 3-axis accelerometer vertical jolts ($a_z$) and vehicle speed.
+* **International Roughness Index (IRI)**: Computes ASTM E1926 quarter-car RMS roughness approximations ($m/km$).
+* **0-100 RHI Scoring**: Classifies pavement condition (`GOOD`, `FAIR`, `POOR`, `CRITICAL`).
+* **Municipal Repaving Priority**: Optimizes repaving schedules combining degradation severity (50%), active pothole density (30%), and arterial traffic weight (20%).
+* **GIS Interoperability**: Exports color-coded corridor survey traces to standard KML (Google Earth) and GeoJSON (QGIS/ArcGIS).
 
 ---
 
