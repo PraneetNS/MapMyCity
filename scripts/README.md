@@ -20,6 +20,9 @@ All scripts support standalone execution with `--help`, graceful fallback to off
 | `compute_ward_sla_metrics.py` | Municipal Ops | Computes per-ward resolution turnaround time, pending defect backlog, and SLA compliance rates. | `--days`, `--ward`, `--export-csv` |
 | `anonymize_submission_media.py` | Privacy & Safety | Strips EXIF GPS metadata and blurs simulated faces/license plates for open data exports. | `--input-dir`, `--output-dir`, `--blur-faces` |
 | `generate_synthetic_potholes.py` | AI / Training | Generates synthetic road defect images with labeled bounding boxes and varying lighting conditions. | `--count`, `--output-dir`, `--augment` |
+| `simulate_work_order_dispatch.py` | Dispatch / Ops | Simulates batch defect cluster triage, tests automated department routing, and benchmarks SLA latency. | `--batch`, `--storm`, `--out` |
+| `export_road_health_kml.py` | GIS / Roughness | Exports road segment roughness (IRI) and Road Health Index (RHI) traces into GIS-compatible KML or GeoJSON. | `--format`, `--out` |
+| `sla_breach_watchdog.py` | SLA Watchdog | Scans active contractor work orders, issues early breach warnings, and triggers automated executive escalations. | `--once`, `--auto-escalate`, `--interval-sec` |
 | `check_database_migrations.py` | Database CI | Lints migration SQL scripts for transaction safety, foreign key indexes, and idempotency. | `--dir`, `--strict` |
 | `evaluate_consensus_quorum.py` | Consensus AI | Evaluates community confirmation consensus scores, evidence independence, and dispute risk flags. | `--cluster-id`, `--min-evidence` |
 | `simulate_webhook_dispatcher.py` | Integrations | Emulates municipal partner webhook dispatching with HMAC-SHA256 signature verification. | `--endpoint`, `--secret`, `--events` |
