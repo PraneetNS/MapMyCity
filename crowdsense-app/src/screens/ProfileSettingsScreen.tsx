@@ -30,6 +30,7 @@ import {
   Trash2,
   Share2,
   Radio,
+  Wrench,
 } from 'lucide-react-native';
 import { getOrInitializeLiteMode, setLiteModeEnabled } from '../services/liteMode';
 import { getOrInitializeDataSaver, setDataSaverEnabled } from '../services/dataSaver';
@@ -46,6 +47,7 @@ import { SocialImpactShareModal } from '../components/SocialImpactShareModal';
 import { FAQHelpModal } from '../components/FAQHelpModal';
 import { ImpactCardData } from '../services/impactCardGenerator';
 import CivicProfileScreen from './CivicProfileScreen';
+import WorkOrdersScreen from './WorkOrdersScreen';
 
 interface ProfileSettingsScreenProps {
   onOpenLegalSettings: () => void;
@@ -67,6 +69,7 @@ export default function ProfileSettingsScreen({
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showCivicProfileModal, setShowCivicProfileModal] = useState(false);
+  const [showWorkOrdersModal, setShowWorkOrdersModal] = useState(false);
   const [shareData, setShareData] = useState<ImpactCardData | null>(null);
 
   // Offline maps state
@@ -246,6 +249,17 @@ export default function ProfileSettingsScreen({
             View Civic Reputation, Score & Badges
           </Text>
         </Pressable>
+
+        {/* Field Contractor Work Orders & Repair Queue */}
+        <Pressable
+          onPress={() => setShowWorkOrdersModal(true)}
+          style={[styles.shareImpactBtn, { backgroundColor: '#F0FDF4', borderColor: '#22C55E', marginTop: 8 }]}
+        >
+          <Wrench size={16} color="#16A34A" />
+          <Text style={[styles.shareImpactBtnText, { color: '#16A34A' }]}>
+            Field Operations & Work Orders
+          </Text>
+        </Pressable>
       </View>
 
       {/* Performance, Network & Storage Management */}
@@ -393,6 +407,11 @@ export default function ProfileSettingsScreen({
       {/* Full Civic Profile Modal */}
       <Modal visible={showCivicProfileModal} animationType="slide">
         <CivicProfileScreen onBack={() => setShowCivicProfileModal(false)} />
+      </Modal>
+
+      {/* Field Operations Work Orders Modal */}
+      <Modal visible={showWorkOrdersModal} animationType="slide">
+        <WorkOrdersScreen onBack={() => setShowWorkOrdersModal(false)} />
       </Modal>
 
       <SocialImpactShareModal
