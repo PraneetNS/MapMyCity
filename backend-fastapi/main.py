@@ -3040,6 +3040,7 @@ from routers.surveys import router as surveys_router
 from routers.civic_issues import router as civic_issues_router, api_v1_router as civic_issues_v1_router
 from routers.weather_civic_risk import router as weather_civic_risk_router
 from routers.civic_reputation import router as civic_reputation_router
+from routers.dispatch_escalation import router as dispatch_escalation_router
 
 app.include_router(telemetry_router)
 app.include_router(export_router)
@@ -3049,6 +3050,7 @@ app.include_router(civic_issues_router)
 app.include_router(civic_issues_v1_router)
 app.include_router(weather_civic_risk_router)
 app.include_router(civic_reputation_router)
+app.include_router(dispatch_escalation_router)
 
 
 
