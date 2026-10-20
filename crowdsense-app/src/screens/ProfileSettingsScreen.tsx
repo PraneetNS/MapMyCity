@@ -31,6 +31,7 @@ import {
   Share2,
   Radio,
   Wrench,
+  Calculator,
 } from 'lucide-react-native';
 import { getOrInitializeLiteMode, setLiteModeEnabled } from '../services/liteMode';
 import { getOrInitializeDataSaver, setDataSaverEnabled } from '../services/dataSaver';
@@ -48,6 +49,7 @@ import { FAQHelpModal } from '../components/FAQHelpModal';
 import { ImpactCardData } from '../services/impactCardGenerator';
 import CivicProfileScreen from './CivicProfileScreen';
 import WorkOrdersScreen from './WorkOrdersScreen';
+import RepairCostEstimatorScreen from './RepairCostEstimatorScreen';
 
 interface ProfileSettingsScreenProps {
   onOpenLegalSettings: () => void;
@@ -70,6 +72,7 @@ export default function ProfileSettingsScreen({
   const [showShareModal, setShowShareModal] = useState(false);
   const [showCivicProfileModal, setShowCivicProfileModal] = useState(false);
   const [showWorkOrdersModal, setShowWorkOrdersModal] = useState(false);
+  const [showRepairEstimatorModal, setShowRepairEstimatorModal] = useState(false);
   const [shareData, setShareData] = useState<ImpactCardData | null>(null);
 
   // Offline maps state
@@ -260,6 +263,17 @@ export default function ProfileSettingsScreen({
             Field Operations & Work Orders
           </Text>
         </Pressable>
+
+        {/* Repair Cost & BOM Estimator */}
+        <Pressable
+          onPress={() => setShowRepairEstimatorModal(true)}
+          style={[styles.shareImpactBtn, { backgroundColor: '#F0F9FF', borderColor: '#0284C7', marginTop: 8 }]}
+        >
+          <Calculator size={16} color="#0284C7" />
+          <Text style={[styles.shareImpactBtnText, { color: '#0284C7' }]}>
+            Repair Cost & BOM Estimator (CPWD DSR)
+          </Text>
+        </Pressable>
       </View>
 
       {/* Performance, Network & Storage Management */}
@@ -412,6 +426,11 @@ export default function ProfileSettingsScreen({
       {/* Field Operations Work Orders Modal */}
       <Modal visible={showWorkOrdersModal} animationType="slide">
         <WorkOrdersScreen onBack={() => setShowWorkOrdersModal(false)} />
+      </Modal>
+
+      {/* Repair Cost & BOM Estimator Modal */}
+      <Modal visible={showRepairEstimatorModal} animationType="slide">
+        <RepairCostEstimatorScreen onBack={() => setShowRepairEstimatorModal(false)} />
       </Modal>
 
       <SocialImpactShareModal
