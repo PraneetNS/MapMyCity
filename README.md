@@ -17,6 +17,10 @@ The platform features an advanced edge/cloud tiered AI architecture (see [AI_FEA
 - **Community Consensus & Evidence Independence**: Multi-signal scoring engine aggregating independent citizen observations, temporal half-life decay, and dispute queues.
 - **Weather + Civic Intelligence & Predictive Flood Risk**: Explainable statistical engine combining live precipitation, PostGIS historical defect records, chronic hotspots, and route safety checks.
 - **Civic Reputation & Gamification Engine**: Append-only auditable ledger rewarding verified civic value (not raw volume) with anti-gaming idempotency, trust gating, 8-badge multi-tier progression, and strict Trust Score vs Civic Score separation.
+- **Autonomous Municipal Dispatch & SLA Escalation Watchdog**: Rule-based department routing (`ROADS`, `DRAIN`, `ELEC`, `SWM`), priority triage, dynamic SLA deadlines, and automated executive escalations.
+- **Road Surface Health Index (RHI) & IRI Roughness Engine**: ASTM E1926 quarter-car vertical jolt vibration processing, $0 \to 100$ pavement health scoring, and GIS KML/GeoJSON network exporters.
+- **Defect Repair Cost Estimation & Bill of Materials (BOM) Generator**: Engineering models calibrated to CPWD DSR 2024 and MoRTH 500 specifications with embodied carbon calculation, interactive mobile estimator, and competitive contractor bidding console.
+- **Pedestrian & Cyclist Micro-Mobility Safety Index**: IRC SP-091 multi-factor vulnerability scoring, universal accessibility analysis (tactile paving, curb cuts, open storm drain protection), and GIS corridor heatmap exporter.
 
 ---
 
@@ -183,13 +187,12 @@ A Next.js 14 dashboard ([`page.tsx`](file:///d:/MapMyCity/crowdsense-admin/src/a
 ## 🚀 Quick Start Guide
 
 ### 1. Database Setup (Postgres & PostGIS)
-To initialize the PostGIS tables, execute the database migration scripts against your PostgreSQL or Supabase instance in numerical order:
-1. [`01_enable_extensions.sql`](file:///d:/MapMyCity/database/migrations/01_enable_extensions.sql)
-2. [`02_create_devices_and_clusters.sql`](file:///d:/MapMyCity/database/migrations/02_create_devices_and_clusters.sql)
-3. [`03_create_submissions.sql`](file:///d:/MapMyCity/database/migrations/03_create_submissions.sql)
-4. [`04_create_triggers_and_indices.sql`](file:///d:/MapMyCity/database/migrations/04_create_triggers_and_indices.sql)
-5. [`05_create_resolution_tracking.sql`](file:///d:/MapMyCity/database/migrations/05_create_resolution_tracking.sql)
-6. [`06_add_passive_road_quality.sql`](file:///d:/MapMyCity/database/migrations/06_add_passive_road_quality.sql)
+To initialize the PostGIS tables, execute the database migration scripts against your PostgreSQL or Supabase instance in numerical order (Migrations 01 through 22 in `database/migrations/`):
+```bash
+# Automatically applies all 22 migrations sequentially
+python backend-fastapi/apply_migrations.py
+```
+Or execute the `.sql` scripts manually, including [`21_automated_dispatch_and_escalations.sql`](file:///d:/MapMyCity/database/migrations/21_automated_dispatch_and_escalations.sql) and [`22_repair_cost_estimation_and_contractor_bids.sql`](file:///d:/MapMyCity/database/migrations/22_repair_cost_estimation_and_contractor_bids.sql).
 
 ### 2. Run the FastAPI Backend
 ```bash

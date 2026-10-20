@@ -23,6 +23,8 @@ All scripts support standalone execution with `--help`, graceful fallback to off
 | `simulate_work_order_dispatch.py` | Dispatch / Ops | Simulates batch defect cluster triage, tests automated department routing, and benchmarks SLA latency. | `--batch`, `--storm`, `--out` |
 | `export_road_health_kml.py` | GIS / Roughness | Exports road segment roughness (IRI) and Road Health Index (RHI) traces into GIS-compatible KML or GeoJSON. | `--format`, `--out` |
 | `sla_breach_watchdog.py` | SLA Watchdog | Scans active contractor work orders, issues early breach warnings, and triggers automated executive escalations. | `--once`, `--auto-escalate`, `--interval-sec` |
+| `simulate_repair_costs.py` | Cost & BOM | Simulates batch defect repair cost estimation, Bill of Materials (BOM) quantification, and contractor tender pricing. | `--count`, `--emergency`, `--output` |
+| `audit_pedestrian_safety.py` | Urban Safety | Audits pedestrian corridors, evaluates micro-mobility hazard indices (IRC SP-091), and exports GIS GeoJSON linestrings. | `--geojson` |
 | `check_database_migrations.py` | Database CI | Lints migration SQL scripts for transaction safety, foreign key indexes, and idempotency. | `--dir`, `--strict` |
 | `evaluate_consensus_quorum.py` | Consensus AI | Evaluates community confirmation consensus scores, evidence independence, and dispute risk flags. | `--cluster-id`, `--min-evidence` |
 | `simulate_webhook_dispatcher.py` | Integrations | Emulates municipal partner webhook dispatching with HMAC-SHA256 signature verification. | `--endpoint`, `--secret`, `--events` |

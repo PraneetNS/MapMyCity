@@ -164,3 +164,31 @@ MapMyCity layers specialized artificial intelligence across both edge devices (c
 - **GIS Export & Integration**:
   - Automated KML and GeoJSON exporters (`scripts/export_road_health_kml.py`) generate color-coded street network maps compatible with Google Earth, QGIS, and ArcGIS.
 
+---
+
+## Part 12 — Defect Repair Cost Estimation & Bill of Materials (BOM) Engine
+
+- **Municipal Problem**: Urban civic departments suffer from delayed budgeting, lack of standardized material estimates for pothole repairs, and non-transparent contractor tender allocation.
+- **CPWD DSR 2024 & MoRTH 500 Engineering Model**:
+  - Calculates engineered squaring (15% mechanical perimeter overcut) and volumetric cubic meters.
+  - Generates instant Bill of Materials (BOM): Bituminous Concrete (VG-30) in kg/tonnes, Bitumen Tack Coat emulsion (RS-1) at 0.25 kg/m², and Wet Mix Macadam (WMM) granular subbase when depth > 6 cm.
+  - Itemized financial breakdown covering materials, compaction roller equipment rental, and skilled road crews.
+  - Embodied carbon footprint calculation ($0.052 \text{ kg CO}_2\text{e/kg}$ bitumen) with environmental mitigation scoring.
+- **Contractor Bidding & Tender Management**:
+  - Competitive contractor bid registry (`contractor_repair_bids` table in Migration 22) allowing vendors to submit pricing, warranty duration (months), and mix grades.
+  - Dedicated Next.js admin console (`/repair-costs`) for awarding tenders and dispatching work orders.
+- **Mobile Engineer Tool**:
+  - Offline-first `RepairCostEstimatorScreen` integrated into `ProfileSettingsScreen` enabling field inspectors to calculate instant BOMs with zero cellular network.
+
+---
+
+## Part 13 — Pedestrian & Cyclist Micro-Mobility Vulnerability Safety Index
+
+- **Civic Problem**: Traditional transport planning prioritizes motorized vehicular traffic, ignoring pedestrian sidewalk hazards, tripping hazards, missing streetlights, and lack of universal accessibility.
+- **Composite Hazard Scoring Engine (IRC SP-091)**:
+  - Multi-factor index ($0 \to 100$) evaluating sidewalk continuity, lighting adequacy, tactile paving coverage, pothole trip hazards, and open storm drain trenches.
+  - Automated classification into `LOW_RISK`, `MODERATE_RISK`, `HIGH_RISK`, and `SEVERE_VULNERABILITY`.
+  - Specific civil engineering remediation prescriptions (e.g. tactile paving for visual impairment, ductile iron grating on open storm drains, 1:12 dropped curb ramps).
+- **GIS Heatmap Export**:
+  - `scripts/audit_pedestrian_safety.py` exports GeoJSON LineString corridors for city urban planners to integrate into municipal GIS platforms.
+
