@@ -3042,6 +3042,8 @@ from routers.weather_civic_risk import router as weather_civic_risk_router
 from routers.civic_reputation import router as civic_reputation_router
 from routers.dispatch_escalation import router as dispatch_escalation_router
 from routers.road_health import router as road_health_router
+from routers.repair_costs import router as repair_costs_router
+from routers.pedestrian_safety import router as pedestrian_safety_router
 
 app.include_router(telemetry_router)
 app.include_router(export_router)
@@ -3053,6 +3055,8 @@ app.include_router(weather_civic_risk_router)
 app.include_router(civic_reputation_router)
 app.include_router(dispatch_escalation_router)
 app.include_router(road_health_router)
+app.include_router(repair_costs_router)
+app.include_router(pedestrian_safety_router)
 
 
 
