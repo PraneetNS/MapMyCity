@@ -3044,6 +3044,8 @@ from routers.dispatch_escalation import router as dispatch_escalation_router
 from routers.road_health import router as road_health_router
 from routers.repair_costs import router as repair_costs_router
 from routers.pedestrian_safety import router as pedestrian_safety_router
+from routers.comments import router as comments_router
+from routers.asset_tags import router as asset_tags_router
 
 app.include_router(telemetry_router)
 app.include_router(export_router)
@@ -3057,6 +3059,8 @@ app.include_router(dispatch_escalation_router)
 app.include_router(road_health_router)
 app.include_router(repair_costs_router)
 app.include_router(pedestrian_safety_router)
+app.include_router(comments_router)
+app.include_router(asset_tags_router)
 
 
 
