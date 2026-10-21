@@ -32,6 +32,7 @@ import {
   Radio,
   Wrench,
   Calculator,
+  QrCode,
 } from 'lucide-react-native';
 import { getOrInitializeLiteMode, setLiteModeEnabled } from '../services/liteMode';
 import { getOrInitializeDataSaver, setDataSaverEnabled } from '../services/dataSaver';
@@ -50,6 +51,7 @@ import { ImpactCardData } from '../services/impactCardGenerator';
 import CivicProfileScreen from './CivicProfileScreen';
 import WorkOrdersScreen from './WorkOrdersScreen';
 import RepairCostEstimatorScreen from './RepairCostEstimatorScreen';
+import CivicAssetScannerScreen from './CivicAssetScannerScreen';
 
 interface ProfileSettingsScreenProps {
   onOpenLegalSettings: () => void;
@@ -73,6 +75,7 @@ export default function ProfileSettingsScreen({
   const [showCivicProfileModal, setShowCivicProfileModal] = useState(false);
   const [showWorkOrdersModal, setShowWorkOrdersModal] = useState(false);
   const [showRepairEstimatorModal, setShowRepairEstimatorModal] = useState(false);
+  const [showAssetScannerModal, setShowAssetScannerModal] = useState(false);
   const [shareData, setShareData] = useState<ImpactCardData | null>(null);
 
   // Offline maps state
@@ -274,6 +277,17 @@ export default function ProfileSettingsScreen({
             Repair Cost & BOM Estimator (CPWD DSR)
           </Text>
         </Pressable>
+
+        {/* Civic Asset QR Inspector */}
+        <Pressable
+          onPress={() => setShowAssetScannerModal(true)}
+          style={[styles.shareImpactBtn, { backgroundColor: '#EEF2FF', borderColor: '#4F46E5', marginTop: 8 }]}
+        >
+          <QrCode size={16} color="#4F46E5" />
+          <Text style={[styles.shareImpactBtnText, { color: '#4F46E5' }]}>
+            Civic Asset QR Inspector & Registry
+          </Text>
+        </Pressable>
       </View>
 
       {/* Performance, Network & Storage Management */}
@@ -431,6 +445,11 @@ export default function ProfileSettingsScreen({
       {/* Repair Cost & BOM Estimator Modal */}
       <Modal visible={showRepairEstimatorModal} animationType="slide">
         <RepairCostEstimatorScreen onBack={() => setShowRepairEstimatorModal(false)} />
+      </Modal>
+
+      {/* Civic Asset QR Inspector Modal */}
+      <Modal visible={showAssetScannerModal} animationType="slide">
+        <CivicAssetScannerScreen onBack={() => setShowAssetScannerModal(false)} />
       </Modal>
 
       <SocialImpactShareModal
