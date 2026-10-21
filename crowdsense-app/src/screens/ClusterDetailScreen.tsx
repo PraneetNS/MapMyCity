@@ -39,6 +39,13 @@ import { StatusTimeline } from '../components/StatusTimeline';
 import { useTheme } from '../theme/ThemeContext';
 import { getUserSession } from '../services/auth';
 import { triggerContextualStoreReview } from '../services/storeReview';
+import {
+  fetchClusterComments,
+  postClusterComment,
+  upvoteComment,
+  flagComment,
+  ClusterComment,
+} from '../services/commentService';
 
 interface ClusterDetailScreenProps {
   clusterId: string;
@@ -118,7 +125,7 @@ export default function ClusterDetailScreen({
       setEvents(eventsData || []);
 
       // 2. Fetch Comments
-      const commentsData = await apiFetch(`/clusters/${clusterId}/comments`).catch(() => []);
+      const commentsData = await fetchClusterComments(clusterId).catch(() => []);
       setComments(commentsData || []);
 
       // 3. Fetch Community Consensus & Issue Info
@@ -353,24 +360,24 @@ export default function ClusterDetailScreen({
     setIsSubmitting(true);
     try {
       const session = await getUserSession();
-      const payload = {
-        body: commentText.trim(),
-        user_id: session?.userId || null,
-        author_name: session ? 'Verified Citizen' : 'Civic Resident',
-        is_anonymous: isAnonymous,
-      };
+      const author = session?.name || (isAnonymous ? 'Anonymous Resident' : 'Civic Resident');
+      const newComment = await postClusterComment(
+        clusterId,
+        commentText.trim(),
+        author,
+        session?.userId,
+        isAnonymous,
+        cluster?.category
+      );
 
-      const newComment = await apiFetch(`/clusters/${clusterId}/comments`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      setComments((prev) => [...prev, newComment]);
+      setComments((prev) => [newComment, ...prev.filter((c) => c.id !== newComment.id)]);
       setCommentText('');
       Toast.show({
         type: 'success',
         text1: 'Comment Posted',
-        text2: 'Thank you for adding local context.',
+        text2: newComment.pii_redacted
+          ? 'Note: Phone/email was masked for privacy.'
+          : 'Thank you for adding local context.',
       });
     } catch (err: any) {
       Toast.show({
@@ -381,6 +388,53 @@ export default function ClusterDetailScreen({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleUpvoteCommentAction = async (commentId: string) => {
+    try {
+      await upvoteComment(clusterId, commentId);
+      setComments((prev) =>
+        prev.map((c) => (c.id === commentId ? { ...c, upvotes: (c.upvotes || 0) + 1 } : c))
+      );
+      Toast.show({
+        type: 'success',
+        text1: 'Helpful Vote Recorded',
+        text2: 'Thank you for verifying local community notes.',
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleFlagCommentAction = async (commentId: string) => {
+    Alert.alert(
+      'Flag Comment',
+      'Is this comment offensive, spam, or misleading?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report / Flag',
+          style: 'destructive',
+          onPress: async () => {
+            await flagComment(clusterId, commentId, 'community_report');
+            setComments((prev) =>
+              prev
+                .map((c) =>
+                  c.id === commentId
+                    ? { ...c, flag_count: (c.flag_count || 0) + 1, is_flagged: true }
+                    : c
+                )
+                .filter((c) => (c.flag_count || 0) < 3)
+            );
+            Toast.show({
+              type: 'info',
+              text1: 'Flag Submitted',
+              text2: 'Comments with multiple flags are hidden automatically.',
+            });
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -670,6 +724,24 @@ export default function ClusterDetailScreen({
                   </Text>
                 </View>
                 <Text style={styles.commentBodyText}>{comment.body}</Text>
+                <View style={styles.commentFooterRow}>
+                  <Pressable
+                    onPress={() => handleUpvoteCommentAction(comment.id)}
+                    style={styles.commentActionBtn}
+                  >
+                    <ThumbsUp size={12} color="#4F46E5" />
+                    <Text style={styles.commentActionText}>
+                      {(comment as any).upvotes || 0} Helpful
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleFlagCommentAction(comment.id)}
+                    style={styles.commentActionBtn}
+                  >
+                    <Flag size={12} color="#94A3B8" />
+                    <Text style={[styles.commentActionText, { color: '#94A3B8' }]}>Flag</Text>
+                  </Pressable>
+                </View>
               </View>
             ))}
           </View>
@@ -1386,5 +1458,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  commentFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  commentActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4F46E5',
   },
 });
