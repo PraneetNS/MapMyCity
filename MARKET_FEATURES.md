@@ -16,9 +16,9 @@ This document specifies the implementation of 9 market-standard consumer and civ
 | **Part 4** | Offline Map Area Download | Storage & Sync | Lite Mode storage manager, RHI tiles, local SQLite queue | None (Pure Engineering) |
 | **Part 5** | Social Sign-In (Google & Apple) | Auth & FastAPI | `users` table, phone-hash coexistence, capability flags | None (Pure Engineering) |
 | **Part 6** | Contextual In-App Review Prompts | Mobile Client | Milestone triggers & issue resolution event stream | None (Pure Engineering) |
-| **Part 7** | Physical QR-Code Asset Tagging | Admin & Submissions | `submissions` table, Cloudinary ingest, Admin portal | ⚠️ **Requires Municipal Partner Pilot** |
+| **Part 7** | Physical QR-Code Asset Tagging | Admin, Backend & Mobile | `civic_asset_tags` (M23), `/api/v1/assets`, `CivicAssetScannerScreen`, `/assets` Admin, CLI provisioner | ✅ **Shipped (M23, API, Mobile, Admin & CLI)** |
 | **Part 8** | Explicit Low-Data / Data Saver Mode | Network & Settings | `expo-network`, image quality pipeline, Lite Mode settings | None (Pure Engineering) |
-| **Part 9** | Cluster Comments & Local Discussion | DB, API & Client | `clusters` audit trail, text moderation, peer flagging | None (Pure Engineering) |
+| **Part 9** | Cluster Comments & Local Discussion | DB, API & Client | `cluster_comments` (M23), `/api/v1/comments`, `ClusterCommentService`, `ClusterDetailScreen`, `/comments` Admin | ✅ **Shipped (M23, API, Mobile & Admin Console)** |
 
 ---
 

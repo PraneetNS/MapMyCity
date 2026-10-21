@@ -21,6 +21,8 @@ The platform features an advanced edge/cloud tiered AI architecture (see [AI_FEA
 - **Road Surface Health Index (RHI) & IRI Roughness Engine**: ASTM E1926 quarter-car vertical jolt vibration processing, $0 \to 100$ pavement health scoring, and GIS KML/GeoJSON network exporters.
 - **Defect Repair Cost Estimation & Bill of Materials (BOM) Generator**: Engineering models calibrated to CPWD DSR 2024 and MoRTH 500 specifications with embodied carbon calculation, interactive mobile estimator, and competitive contractor bidding console.
 - **Pedestrian & Cyclist Micro-Mobility Safety Index**: IRC SP-091 multi-factor vulnerability scoring, universal accessibility analysis (tactile paving, curb cuts, open storm drain protection), and GIS corridor heatmap exporter.
+- **Community Discussion Threads & Resident Comments**: Hyper-local defect dialogue with automated PII masking, safety anonymity, helpful upvoting, and 3-strike peer-flagging auto-hide logic.
+- **Physical QR-Code Municipal Infrastructure Registry & Inspection Service**: Cryptographically authenticated hardware asset provisioning (`BLR-STLT`, `BLR-MNH`, `BLR-TRF`, `BLR-DRN`), mobile QR inspection resolver, and admin asset management console.
 
 ---
 
